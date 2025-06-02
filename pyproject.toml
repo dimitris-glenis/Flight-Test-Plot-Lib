@@ -1,0 +1,51 @@
+[tool.black]
+line-length = 100
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["src", "tests"]
+norecursedirs = ["dist", "build", ".tox", ".ipynb_checkpoints"]
+
+[tool.poetry]
+name = "FLIGHT-TEST-PLOTLIB"
+version = "0.1.0"
+description = "Library containing templates for flight test plots"
+authors = ["Aristeidis Antonakis <aantonak@hotmail.com>", "Dimitris Glenis <dimitrisglenis@gmail.com>"]
+
+
+
+
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: Scientific/Engineering :: Physics"
+]
+
+
+
+[tool.poetry.dependencies]
+python = ">=3.9, <3.11"
+
+matplotlib = "^3.5.2"
+numpy = "^1.24.4"
+
+
+
+[tool.poetry.dev-dependencies]
+black = { version = "22.3.0", extras = ["jupyter"] }
+pytest = "^7.1.2"
+flake8 = "^4.0.1"
+debugpy = "1.5.0"
+pre-commit = ">2.12"
+
+[build-system]
+# charset_normalizer is here to allow non-ascii characters in Fortran sources
+#requires = ["poetry-core>=1.0.0", "numpy>=1.23.1", "charset_normalizer"]
+#build-backend = "poetry.core.masonry.api"
