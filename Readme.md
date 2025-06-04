@@ -2,6 +2,8 @@
 
 `FTPlotlib` is a Python-based visualization utility designed to assist in plotting multi-axis time series data, specifically developed for visualizing aircraft spin simulation results. It is interactive, customizable, and includes slider-enabled data inspection tools.
 
+![Example Plot w/ Slider](images/FlightTestPlotExample.png)
+
 ## Features
 
 - 🎯 **Interactive Time Slider**: Inspect values at a specific time using a movable vertical line.
