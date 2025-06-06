@@ -1,13 +1,13 @@
 # Flight Test Plot Lib: Aircraft Flight Test and Simulation Visualization Tool
 
-`FTPlotlib` is a Python-based visualization utility designed to assist in plotting multi-axis time series data, specifically developed for visualizing aircraft spin simulation results. It is interactive, customizable, and includes slider-enabled data inspection tools.
+`FTPlotlib` is a Python-based visualization utility designed for plotting multi-axis time series data, specifically developed for visualizing aircraft flight and simulation test results in compact, a flight-data-recorder-like format. It is interactive, customizable, and includes slider-enabled data inspection tools. The tool comprises a 'wrapper' class for matplotlib, and thus allows for using all 'native' 2D methods and objects of the latter, providing practically unlimited customization possibilities.
 
 ![Example Plot w/ Slider](images/FlightTestPlotExample.png)
 
 ## Features
 
-- 🎯 **Interactive Time Slider**: Inspect values at a specific time using a movable vertical line.
-- 📊 **Multi-Axis Support**: Stack multiple synchronized Y-axes on the same time base.
+- 📊 **Multi-Axis Support**: Stack multiple overlapping Y-axes on the same time grid.
+- 🎯 **Interactive Time Slider**: Interactively inspect values at a specific time using a slider.
 - 🔍 **Auto-Scaling**: Automatically scale added axes to match the plotted data range.
 - 🧰 **Flexible Configuration**: Define grid positions, axis limits, units, and styling.
 - ✨ **Annotated Curves**: Labels and dynamic value boxes display curve values at selected slider positions.
