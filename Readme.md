@@ -50,6 +50,13 @@ git clone https://github.com/yourusername/FTPlotlib.git
 cd FTPlotlib
 ```
 
+Run an example script:
+
+```bash
+python -m test.TestPlotUtilities
+cd FTPlotlib
+```
+
 ## Usage
 
 Import the `FTPlotlib` class in your Python script:
