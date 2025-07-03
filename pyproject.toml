@@ -7,12 +7,12 @@ testpaths = ["src", "tests"]
 norecursedirs = ["dist", "build", ".tox", ".ipynb_checkpoints"]
 
 [tool.poetry]
-name = "flight_test_plot_lib"
+name = "ftplotlib"
 version = "0.1.0"
 description = "Library containing templates for flight test plots"
 authors = ["Aristeidis Antonakis <aantonak@hotmail.com>", "Dimitris Glenis <dimitrisglenis@gmail.com>"]
 packages = [
-    { include = "flight_test_plot_lib", from = "src" }
+    { include = "ftplotlib", from = "src" }
 ]
 
 classifiers = [
