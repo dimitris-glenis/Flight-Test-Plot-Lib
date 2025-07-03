@@ -7,14 +7,10 @@ testpaths = ["src", "tests"]
 norecursedirs = ["dist", "build", ".tox", ".ipynb_checkpoints"]
 
 [tool.poetry]
-name = "FLIGHT-TEST-PLOTLIB"
+name = "flight_test_plot_lib"
 version = "0.1.0"
 description = "Library containing templates for flight test plots"
 authors = ["Aristeidis Antonakis <aantonak@hotmail.com>", "Dimitris Glenis <dimitrisglenis@gmail.com>"]
-
-
-
-
 
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -28,15 +24,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics"
 ]
 
-
-
 [tool.poetry.dependencies]
 python = ">=3.9"
 
 matplotlib = "^3.5.2"
 numpy = "^1.24.4"
 
-
+packages = [
+    { include = "flight_test_plot_lib", from = "." }
+]
 
 [tool.poetry.dev-dependencies]
 black = { version = "22.3.0", extras = ["jupyter"] }
