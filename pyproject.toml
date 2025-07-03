@@ -12,7 +12,7 @@ version = "0.1.0"
 description = "Library containing templates for flight test plots"
 authors = ["Aristeidis Antonakis <aantonak@hotmail.com>", "Dimitris Glenis <dimitrisglenis@gmail.com>"]
 packages = [
-    { include = "flight_test_plot_lib", from = "." }
+    { include = "flight_test_plot_lib", from = "src" }
 ]
 
 classifiers = [
@@ -32,7 +32,6 @@ python = ">=3.9"
 
 matplotlib = "^3.5.2"
 numpy = "^1.24.4"
-
 
 
 [tool.poetry.dev-dependencies]
