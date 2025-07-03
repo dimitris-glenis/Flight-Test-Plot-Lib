@@ -7,14 +7,13 @@ testpaths = ["src", "tests"]
 norecursedirs = ["dist", "build", ".tox", ".ipynb_checkpoints"]
 
 [tool.poetry]
-name = "FLIGHT-TEST-PLOTLIB"
+name = "ftplotlib"
 version = "0.1.0"
 description = "Library containing templates for flight test plots"
 authors = ["Aristeidis Antonakis <aantonak@hotmail.com>", "Dimitris Glenis <dimitrisglenis@gmail.com>"]
-
-
-
-
+packages = [
+    { include = "ftplotlib", from = "src" }
+]
 
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -28,14 +27,11 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics"
 ]
 
-
-
 [tool.poetry.dependencies]
-python = ">=3.9, <3.11"
+python = ">=3.9"
 
 matplotlib = "^3.5.2"
 numpy = "^1.24.4"
-
 
 
 [tool.poetry.dev-dependencies]
@@ -47,5 +43,5 @@ pre-commit = ">2.12"
 
 [build-system]
 # charset_normalizer is here to allow non-ascii characters in Fortran sources
-#requires = ["poetry-core>=1.0.0", "numpy>=1.23.1", "charset_normalizer"]
-#build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "numpy>=1.23.1", "charset_normalizer"]
+build-backend = "poetry.core.masonry.api"
