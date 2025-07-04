@@ -29,7 +29,7 @@ class FTPlot:
         self.Xunit = Xunit
         self.slider = slider
 
-        # Reserve space for grids and slider
+        # Reserve space for grids and optional slider
         plt.subplots_adjust(left=0.15, right=0.85, top=0.95)
         if self.slider:
             ext = ax.get_position()
@@ -38,7 +38,7 @@ class FTPlot:
                 top=ext.y1 + 0.15 - ext.y0
             )
 
-        # Main grid setup
+        # Main axes grid setup
         ax.set_xlim(self.XLim)
         ax.set_ylim(0, 1)
         ax.set_xticks(np.linspace(self.XLim[0], self.XLim[1], self.Ngridx + 1))
@@ -50,7 +50,7 @@ class FTPlot:
         ax.grid(True, which='major', ls='-', color='k', alpha=0.3)
         ax.grid(True, which='minor', ls=':', color='k', alpha=0.3)
 
-        # Slider line and control
+        # Slider control
         if self.slider:
             self.initial_x = self.XLim[0]
             self.vline = ax.axvline(self.initial_x, color='red', linestyle='--')
@@ -64,23 +64,24 @@ class FTPlot:
             )
             self.x_slider.on_changed(self.update)
 
-        # Store sub-axes and curves
+        # Containers for sub-axes and curves
         self.Axis = {}
         self.Curve = {}
 
-        # Connect figure resize event
+        # Connect resize event for auto-rescale
         self.fig.canvas.mpl_connect('resize_event', self._on_resize)
 
     def updateDataBoxes(self, t):
         for data in self.Curve.values():
-            x, y = data['Curve'].get_xdata(), data['Curve'].get_ydata()
+            x = data['Curve'].get_xdata()
+            y = data['Curve'].get_ydata()
             yv = np.interp(t, x, y)
             vb = data['ValueBox']
             vb.set_position((t, yv))
             vb.set_text(f"{yv:.3f}" if self.XLim[0] <= t <= self.XLim[1] else "")
 
     def update(self, val):
-        # Update vertical slider line and box values
+        # Move slider line and update value boxes
         self.vline.set_xdata([val, val])
         self.updateDataBoxes(val)
         self.fig.canvas.draw_idle()
@@ -90,41 +91,41 @@ class FTPlot:
                 Unit="", Position="Left",
                 YLims="Auto", offset=0.02):
         """
-        Add a sub-axis that spans GridHeight cells,
-        centered on the GridPos-th cell.
+        Add a sub-axis GridHeight cells tall, centered on the GridPos-th cell.
         """
         if Name in self.Axis:
             print(f"Axis '{Name}' already exists")
             return
 
-        # Ensure up-to-date position
+        # Force draw and measure main axes
         self.fig.canvas.draw()
         ext = self.ax.get_position()
         cell_h = ext.height / self.Ngridy
         center = ext.y0 + (GridPos + 0.5) * cell_h
         height = GridHeight * cell_h
         bottom = center - height / 2
+
         ax2 = self.fig.add_axes([ext.x0, bottom, ext.width, height])
 
-        # Initial y-limits
+        # Set initial y-limits and enable autoscale
         lims = [-1, 1] if YLims == 'Auto' else YLims
         ax2.set_ylim(lims)
         ax2.set_autoscaley_on(True)
 
-        # Ticks at bottom, mid, top
-        mid = (lims[0] + lims[1]) / 2
-        rng = (lims[1] - lims[0]) / 2
-        ax2.set_yticks([mid - rng, mid, mid + rng])
+        # Major ticks at bottom, middle, top
+        lo, hi = lims
+        mid = (lo + hi) / 2
+        ax2.set_yticks([lo, mid, hi])
 
-        # Share x-limits
+        # Share x-axis
         ax2.set_xlim(self.XLim)
         ax2.set_xticks([])
         ax2.set_xticklabels([])
 
-        # Label & spine styling
+        # Label and spine styling
         ax2.set_ylabel(f"{Name}\n{Unit}", labelpad=0)
-        for spine in ('top', 'bottom'):
-            ax2.spines[spine].set_visible(False)
+        for s in ('top', 'bottom'):
+            ax2.spines[s].set_visible(False)
         ax2.patch.set_visible(False)
         if Position.lower() == 'left':
             ax2.spines['right'].set_visible(False)
@@ -135,6 +136,7 @@ class FTPlot:
             ax2.spines['left'].set_visible(False)
             ax2.spines['right'].set_position(('axes', 1 + offset))
 
+        # Save metadata
         self.Axis[Name] = {
             'ax': ax2,
             'AutoScale': True,
@@ -145,58 +147,79 @@ class FTPlot:
 
     def AddCurve(self, Name, Axis, Xdata, Ydata, **kwargs):
         """
-        Plot a curve; autoscale y-limits to integer-rounded bounds.
+        Plot a curve on the specified sub-axis and auto-rescale to integer bounds
+        with a one-unit padding beyond any exact-integer data endpoints.
         """
         ax2 = self.Axis[Axis]['ax']
-        line, = ax2.plot(Xdata, Ydata, **kwargs)
-        # mid-curve label
+        (line,) = ax2.plot(Xdata, Ydata, **kwargs)
+        # Label
         idx = len(Xdata) // 2
-        ax2.text(Xdata[idx], Ydata[idx], Name,
-                 ha='center', va='center', color=line.get_color(),
-                 bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1'))
-        # value box
-        vb = ax2.text(Xdata[0], Ydata[0], '', ha='center', va='center',
-                      color=line.get_color(), bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0))
+        ax2.text(
+            Xdata[idx], Ydata[idx], Name,
+            ha='center', va='center', color=line.get_color(),
+            bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1')
+        )
+        # Value box
+        vb = ax2.text(
+            Xdata[0], Ydata[0], '',
+            ha='center', va='center', color=line.get_color(),
+            bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
+        )
         self.Curve[Name] = {'Curve': line, 'ValueBox': vb}
 
-                # Autoscale: integer-rounded limits with inclusion check
+        # Auto-rescale if flagged
         info = self.Axis[Axis]
         if info['AutoScale']:
-            data_min, data_max = Ydata.min(), Ydata.max()
-            # round to integers but ensure full inclusion
-            raw_lo = np.floor(data_min)
-            raw_hi = np.ceil(data_max)
-            lo = raw_lo - 1 if np.isclose(data_min, raw_lo) else raw_lo
-            hi = raw_hi + 1 if np.isclose(data_max, raw_hi) else raw_hi
+            dmin = Ydata.min()
+            dmax = Ydata.max()
+            # Compute integer bounds
+            raw_lo = np.floor(dmin)
+            raw_hi = np.ceil(dmax)
+            # pad by 1 unit if data touches integer
+            lo = raw_lo - 1 if np.isclose(dmin, raw_lo) else raw_lo
+            hi = raw_hi + 1 if np.isclose(dmax, raw_hi) else raw_hi
             ax2.set_ylim(lo, hi)
-            ax2.set_yticks([lo, (lo+hi)/2, hi])
+            ax2.set_yticks([lo, (lo + hi) / 2, hi])
 
     def enable_autoscale(self, Name):
-        """Re-enable autoscaling for the sub-axis 'Name'."""
-        if Name in self.Axis:
-            info = self.Axis[Name]
-            info['AutoScale'] = True
-            # trigger an AddCurve-like autoscale
-            ax2 = info['ax']
-            lines = ax2.get_lines()
-            if lines:
-                all_y = np.hstack([ln.get_ydata() for ln in lines])
-                lo, hi = np.floor(all_y.min()), np.ceil(all_y.max())
-                ax2.set_ylim(lo, hi)
-                ax2.set_yticks([lo, (lo+hi)/2, hi])
+        """Re-enable autoscaling for sub-axis 'Name'."""
+        if Name not in self.Axis:
+            print(f"No such axis '{Name}'")
+            return
+        info = self.Axis[Name]
+        info['AutoScale'] = True
+        ax2 = info['ax']
+        lines = ax2.get_lines()
+        if not lines:
+            return
+        all_y = np.hstack([ln.get_ydata() for ln in lines])
+        dmin = all_y.min()
+        dmax = all_y.max()
+        raw_lo = np.floor(dmin)
+        raw_hi = np.ceil(dmax)
+        lo = raw_lo - 1 if np.isclose(dmin, raw_lo) else raw_lo
+        hi = raw_hi + 1 if np.isclose(dmax, raw_hi) else raw_hi
+        ax2.set_ylim(lo, hi)
+        ax2.set_yticks([lo, (lo + hi) / 2, hi])
 
     def _on_resize(self, event):
-        # reapply integer-rounded autoscale
+        # Reapply padded integer bounds on resize
         for info in self.Axis.values():
-            if info['AutoScale']:
-                ax2 = info['ax']
-                lines = ax2.get_lines()
-                if not lines:
-                    continue
-                all_y = np.hstack([ln.get_ydata() for ln in lines])
-                lo, hi = np.floor(all_y.min()), np.ceil(all_y.max())
-                ax2.set_ylim(lo, hi)
-                ax2.set_yticks([lo, (lo+hi)/2, hi])
+            if not info['AutoScale']:
+                continue
+            ax2 = info['ax']
+            lines = ax2.get_lines()
+            if not lines:
+                continue
+            all_y = np.hstack([ln.get_ydata() for ln in lines])
+            dmin = all_y.min()
+            dmax = all_y.max()
+            raw_lo = np.floor(dmin)
+            raw_hi = np.ceil(dmax)
+            lo = raw_lo - 1 if np.isclose(dmin, raw_lo) else raw_lo
+            hi = raw_hi + 1 if np.isclose(dmax, raw_hi) else raw_hi
+            ax2.set_ylim(lo, hi)
+            ax2.set_yticks([lo, (lo + hi) / 2, hi])
 
 
 
