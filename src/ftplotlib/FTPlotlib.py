@@ -38,7 +38,7 @@ class FTPlot:
                 top=ext.y1 + 0.15 - ext.y0
             )
 
-        # Main grid
+        # Main grid setup
         ax.set_xlim(self.XLim)
         ax.set_ylim(0, 1)
         ax.set_xticks(np.linspace(self.XLim[0], self.XLim[1], self.Ngridx + 1))
@@ -50,7 +50,7 @@ class FTPlot:
         ax.grid(True, which='major', ls='-', color='k', alpha=0.3)
         ax.grid(True, which='minor', ls=':', color='k', alpha=0.3)
 
-        # Slider line and control
+        # Optional slider line
         if self.slider:
             self.initial_x = self.XLim[0]
             self.vline = ax.axvline(self.initial_x, color='red', linestyle='--')
@@ -64,11 +64,11 @@ class FTPlot:
             )
             self.x_slider.on_changed(self.update)
 
-        # Storage for sub-axes and curves
+        # Store sub-axes and curves
         self.Axis = {}
         self.Curve = {}
 
-        # Connect resize event to re-autoscale if needed
+        # Connect figure resize event
         self.fig.canvas.mpl_connect('resize_event', self._on_resize)
 
     def updateDataBoxes(self, t):
@@ -80,7 +80,7 @@ class FTPlot:
             vb.set_text(f"{yv:.3f}" if self.XLim[0] <= t <= self.XLim[1] else "")
 
     def update(self, val):
-        # Move vertical slider line and update data boxes
+        # Update vertical slider line and box values
         self.vline.set_xdata([val, val])
         self.updateDataBoxes(val)
         self.fig.canvas.draw_idle()
@@ -90,54 +90,55 @@ class FTPlot:
                 Unit="", Position="Left",
                 YLims="Auto", offset=0.02):
         """
-        GridHeight=1 => one full rectangle tall;
-        GridPos=k => center on k-th rectangle.
+        Add a sub-axis that spans GridHeight cells (one rectangle per cell),
+        centered on the GridPos-th cell.
         """
         if Name in self.Axis:
-            print(f"Axis '{Name}' exists")
+            print(f"Axis '{Name}' already exists")
             return
 
-        # Ensure up-to-date positioning
+        # Force draw to update positions
         self.fig.canvas.draw()
         ext = self.ax.get_position()
         cell_h = ext.height / self.Ngridy
         center = ext.y0 + (GridPos + 0.5) * cell_h
         height = GridHeight * cell_h
         bottom = center - height / 2
+
         ax2 = self.fig.add_axes([ext.x0, bottom, ext.width, height])
 
-        # Y-limits setup
+        # Y-axis limits and disable default autoscale
         lims = [-1, 1] if YLims == 'Auto' else YLims
         ax2.set_ylim(lims)
-        # disable built-in autoscaling
         ax2.set_autoscaley_on(False)
 
-        # Ticks: bottom, middle, top
+        # Ticks at bottom, mid, top of lims
         mid = (lims[0] + lims[1]) / 2
         rng = (lims[1] - lims[0]) / 2
         ax2.set_yticks([mid - rng, mid, mid + rng])
 
-        # X-share and hide labels
+        # Share x-limits
         ax2.set_xlim(self.XLim)
-        ax2.set_xticks([]);
+        ax2.set_xticks([])
         ax2.set_xticklabels([])
 
-        # Label & spines
+        # Label & spine styling
         ax2.set_ylabel(f"{Name}\n{Unit}", labelpad=0)
-        for s in ('top', 'bottom'):
-            ax2.spines[s].set_visible(False)
+        for spine in ('top', 'bottom'):
+            ax2.spines[spine].set_visible(False)
         ax2.patch.set_visible(False)
         if Position.lower() == 'left':
             ax2.spines['right'].set_visible(False)
             ax2.spines['left'].set_bounds(lims[0], lims[1])
             ax2.spines['left'].set_position(('axes', -offset))
         else:
-            ax2.yaxis.tick_right();
+            ax2.yaxis.tick_right()
             ax2.yaxis.set_label_position('right')
             ax2.spines['left'].set_visible(False)
             ax2.spines['right'].set_bounds(lims[0], lims[1])
             ax2.spines['right'].set_position(('axes', 1 + offset))
 
+        # Mark as autoscalable and attach manual-limit handler
         self.Axis[Name] = {
             'ax': ax2,
             'AutoScale': (YLims == 'Auto'),
@@ -146,31 +147,36 @@ class FTPlot:
             'Position': Position
         }
 
+        # If user manually adjusts limits, disable AutoScale
+        def on_ylim_change(event_ax):
+            if event_ax is ax2:
+                self.Axis[Name]['AutoScale'] = False
+        ax2.callbacks.connect('ylim_changed', on_ylim_change)
+
     def AddCurve(self, Name, Axis, Xdata, Ydata, **kwargs):
         """
-        Plot a curve on sub-axis 'Axis'.
-        AutoScale=True => pad limits to include full data with margin.
+        Plot a curve on the specified sub-axis.
+        If AutoScale is True, pad and fit data fully.
         """
         ax2 = self.Axis[Axis]['ax']
         line, = ax2.plot(Xdata, Ydata, **kwargs)
 
-        # Static label in the middle
+        # Label in mid-curve
         idx = len(Xdata) // 2
         ax2.text(Xdata[idx], Ydata[idx], Name,
                  ha='center', va='center', color=line.get_color(),
                  bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1'))
-
-        # Dynamic value box at start
+        # Value box at start
         vb = ax2.text(Xdata[0], Ydata[0], '',
                       ha='center', va='center', color=line.get_color(),
                       bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0))
         self.Curve[Name] = {'Curve': line, 'ValueBox': vb}
 
-        # Manual autoscale with margin
+        # Manual autoscale with padding
         info = self.Axis[Axis]
         if info['AutoScale']:
             dmin, dmax = np.min(Ydata), np.max(Ydata)
-            pad = 0.02 * (dmax - dmin) if (dmax > dmin) else 0.1
+            pad = 0.02 * (dmax - dmin) if dmax > dmin else 0.1
             ax2.set_ylim(dmin - pad, dmax + pad)
             mid = 0.5 * (dmin + dmax)
             rng = 0.5 * (dmax - dmin) + pad
@@ -179,15 +185,16 @@ class FTPlot:
             ax2.spines[sp].set_bounds(dmin - pad, dmax + pad)
 
     def _on_resize(self, event):
-        # Re-apply autoscaling on resize
+        # Reapply autoscaling only where still enabled
         for info in self.Axis.values():
             if info['AutoScale']:
                 ax2 = info['ax']
                 lines = ax2.get_lines()
-                if not lines: continue
+                if not lines:
+                    continue
                 all_y = np.hstack([ln.get_ydata() for ln in lines])
-                dmin, dmax = np.min(all_y), np.max(all_y)
-                pad = 0.02 * (dmax - dmin) if (dmax > dmin) else 0.1
+                dmin, dmax = all_y.min(), all_y.max()
+                pad = 0.02 * (dmax - dmin) if dmax > dmin else 0.1
                 ax2.set_ylim(dmin - pad, dmax + pad)
                 mid = 0.5 * (dmin + dmax)
                 rng = 0.5 * (dmax - dmin) + pad
