@@ -159,13 +159,15 @@ class FTPlot:
                       color=line.get_color(), bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0))
         self.Curve[Name] = {'Curve': line, 'ValueBox': vb}
 
-        # Autoscale: integer-rounded limits
+                # Autoscale: integer-rounded limits with inclusion check
         info = self.Axis[Axis]
         if info['AutoScale']:
             data_min, data_max = Ydata.min(), Ydata.max()
-            # round outwards to nearest integer
-            lo = np.floor(data_min)
-            hi = np.ceil(data_max)
+            # round to integers but ensure full inclusion
+            raw_lo = np.floor(data_min)
+            raw_hi = np.ceil(data_max)
+            lo = raw_lo - 1 if np.isclose(data_min, raw_lo) else raw_lo
+            hi = raw_hi + 1 if np.isclose(data_max, raw_hi) else raw_hi
             ax2.set_ylim(lo, hi)
             ax2.set_yticks([lo, (lo+hi)/2, hi])
 
