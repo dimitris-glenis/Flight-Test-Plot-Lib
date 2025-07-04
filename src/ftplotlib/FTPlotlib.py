@@ -110,7 +110,7 @@ class FTPlot:
         # Y-axis limits and disable default autoscale
         lims = [-1, 1] if YLims == 'Auto' else YLims
         ax2.set_ylim(lims)
-        ax2.set_autoscaley_on(False)
+        ax2.set_autoscaley_on(True)
 
         # Ticks at bottom, mid, top of lims
         mid = (lims[0] + lims[1]) / 2
