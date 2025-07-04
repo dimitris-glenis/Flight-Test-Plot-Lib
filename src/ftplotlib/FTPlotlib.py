@@ -109,7 +109,7 @@ class FTPlot:
         # Y-limits setup
         lims = [-1, 1] if YLims == 'Auto' else YLims
         ax2.set_ylim(lims)
-        # disable autoscaling until AddCurve
+        # disable built-in autoscaling
         ax2.set_autoscaley_on(False)
 
         # Ticks: bottom, middle, top
@@ -119,7 +119,7 @@ class FTPlot:
 
         # X-share and hide labels
         ax2.set_xlim(self.XLim)
-        ax2.set_xticks([])
+        ax2.set_xticks([]);
         ax2.set_xticklabels([])
 
         # Label & spines
@@ -132,7 +132,7 @@ class FTPlot:
             ax2.spines['left'].set_bounds(lims[0], lims[1])
             ax2.spines['left'].set_position(('axes', -offset))
         else:
-            ax2.yaxis.tick_right()
+            ax2.yaxis.tick_right();
             ax2.yaxis.set_label_position('right')
             ax2.spines['left'].set_visible(False)
             ax2.spines['right'].set_bounds(lims[0], lims[1])
@@ -149,47 +149,52 @@ class FTPlot:
     def AddCurve(self, Name, Axis, Xdata, Ydata, **kwargs):
         """
         Plot a curve on sub-axis 'Axis'.
-        If AutoScale is True, adjust y-limits to fit data exactly within the fixed box height.
+        AutoScale=True => pad limits to include full data with margin.
         """
         ax2 = self.Axis[Axis]['ax']
-        (line,) = ax2.plot(Xdata, Ydata, **kwargs)
+        line, = ax2.plot(Xdata, Ydata, **kwargs)
 
-        # Static label in the middle of the curve
+        # Static label in the middle
         idx = len(Xdata) // 2
-        ax2.text(
-            Xdata[idx], Ydata[idx], Name,
-            ha='center', va='center', color=line.get_color(),
-            bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1')
-        )
+        ax2.text(Xdata[idx], Ydata[idx], Name,
+                 ha='center', va='center', color=line.get_color(),
+                 bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1'))
+
         # Dynamic value box at start
-        vb = ax2.text(
-            Xdata[0], Ydata[0], '',
-            ha='center', va='center', color=line.get_color(),
-            bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
-        )
+        vb = ax2.text(Xdata[0], Ydata[0], '',
+                      ha='center', va='center', color=line.get_color(),
+                      bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0))
         self.Curve[Name] = {'Curve': line, 'ValueBox': vb}
 
-        # Manual autoscale within the fixed axis height
+        # Manual autoscale with margin
         info = self.Axis[Axis]
         if info['AutoScale']:
-            data_min = np.min(Ydata)
-            data_max = np.max(Ydata)
-            ax2.set_ylim(data_min, data_max)
-            mid = 0.5 * (data_min + data_max)
-            yr = 0.5 * (data_max - data_min)
-            ax2.set_yticks([mid - yr, mid, mid + yr])
-            spine = 'left' if info['Position'].lower() == 'left' else 'right'
-            ax2.spines[spine].set_bounds(data_min, data_max)
+            dmin, dmax = np.min(Ydata), np.max(Ydata)
+            pad = 0.02 * (dmax - dmin) if (dmax > dmin) else 0.1
+            ax2.set_ylim(dmin - pad, dmax + pad)
+            mid = 0.5 * (dmin + dmax)
+            rng = 0.5 * (dmax - dmin) + pad
+            ax2.set_yticks([mid - rng, mid, mid + rng])
+            sp = 'left' if info['Position'].lower() == 'left' else 'right'
+            ax2.spines[sp].set_bounds(dmin - pad, dmax + pad)
 
     def _on_resize(self, event):
         # Re-apply autoscaling on resize
         for info in self.Axis.values():
             if info['AutoScale']:
                 ax2 = info['ax']
-                ax2.relim()
-                ax2.autoscale_view()
-                nb = info['GridHeight'] + 1
-                ax2.yaxis.set_major_locator(MaxNLocator(nbins=nb))
+                lines = ax2.get_lines()
+                if not lines: continue
+                all_y = np.hstack([ln.get_ydata() for ln in lines])
+                dmin, dmax = np.min(all_y), np.max(all_y)
+                pad = 0.02 * (dmax - dmin) if (dmax > dmin) else 0.1
+                ax2.set_ylim(dmin - pad, dmax + pad)
+                mid = 0.5 * (dmin + dmax)
+                rng = 0.5 * (dmax - dmin) + pad
+                ax2.set_yticks([mid - rng, mid, mid + rng])
+                sp = info['Position'].lower()
+                spine = 'left' if sp == 'left' else 'right'
+                ax2.spines[sp].set_bounds(dmin - pad, dmax + pad)
 
 
 
