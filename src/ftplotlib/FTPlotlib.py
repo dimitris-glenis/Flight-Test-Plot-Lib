@@ -98,7 +98,7 @@ class FTPlot:
 
     def update(self, val):
 
-        self.vline.set_xdata(val)  # Update x-position of the vertical line
+        self.vline.set_xdata([val, val])  # Update x-position of the vertical line
         self.updateDataBoxes(val)
         self.fig.canvas.draw_idle()  # Redraw the plot
 
@@ -258,7 +258,6 @@ Fdr = FDRplot(ax,slider=True)
 
 Fdr.AddAxis(Name='Axis 1',GridHeight=6,GridPos=.5,Unit='m/s')
 Fdr.AddAxis(Name='Axis 2',GridPos=3,Unit='m/s',Position='Right')
-
 Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=.1)
 
 Xdata = np.linspace(0,1)
