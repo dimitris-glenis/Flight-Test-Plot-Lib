@@ -4,7 +4,7 @@ Created on Tue May 20 11:51:17 2025
 
 @author: aantonak
 """
-
+import matplotlib
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -17,253 +17,228 @@ class FTPlot:
     Aircraft Simulator for Spin
     """
 
-    def __init__(self, fig, ax, Ngridx=10, Ngridy=13, XLim=(0, 1), slider=False, Xunit="s"):
-
+    def __init__(self, fig, ax,
+                 Ngridx=10, Ngridy=10,
+                 XLim=(0, 1), slider=False, Xunit="s"):
+        # Initialize core attributes
         self.fig = fig
         self.ax = ax
-        self.XLim = XLim  # time axis limits
+        self.XLim = XLim
         self.Ngridx = Ngridx
         self.Ngridy = Ngridy
         self.Xunit = Xunit
 
+        # Adjust margins for grid and slider space
         plt.subplots_adjust(left=0.15, right=0.85, top=0.95)
-
         if slider:
-
-            extent = self.ax.get_position()
-
+            ext = ax.get_position()
             plt.subplots_adjust(
-                bottom=0.15, top=extent.y1 + 0.15 - extent.y0
-            )  # Make space for slider
-
-        self.extent = ax.get_position()  # x0 = left, y0 = bottom, x1 = right, y1 = top
-
-        if slider:
-
-            # Add initial vertical line
-            self.initial_x = XLim[0]  # .5*XLim[0]+.5*XLim[1]
-            self.vline = ax.axvline(self.initial_x, color="red", linestyle="--")
-
-            self.slider_ax = self.fig.add_axes(
-                [self.extent.x0, 0.02, self.extent.x1 - self.extent.x0, 0.03]
-            )
-            self.x_slider = Slider(
-                self.slider_ax,
-                "",
-                self.XLim[0],
-                self.XLim[1],
-                valinit=self.initial_x,
-                valfmt="%.2f " + str(self.Xunit),
+                bottom=0.15,
+                top=ext.y1 + 0.15 - ext.y0
             )
 
-            self.x_slider.on_changed(self.update)
-
+        # Configure main axes grid
         self.ax.set_xlim(self.XLim)
         self.ax.set_ylim([0, 1])
-
         self.ax.set_xticks(np.linspace(self.XLim[0], self.XLim[1], Ngridx + 1))
         self.ax.set_yticks(np.linspace(0, 1, Ngridy + 1))
-        self.ax.yaxis.set_minor_locator(AutoMinorLocator(n=5))
-        self.ax.xaxis.set_minor_locator(AutoMinorLocator(n=5))
+        self.ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+        self.ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+        self.ax.set_yticklabels([])
+        self.ax.set_xlabel(f"Time ({self.Xunit})")
+        self.ax.grid(True, which="major", ls="-", color="k", alpha=0.3)
+        self.ax.grid(True, which="minor", ls=":", color="k", alpha=0.3)
 
-        self.ax.set_yticklabels([])  # no y tick labels
+        # Slider setup
+        self.slider = slider
+        if slider:
+            self.initial_x = XLim[0]
+            self.vline = self.ax.axvline(self.initial_x, color="red", linestyle="--")
+            pos = self.ax.get_position()
+            self.slider_ax = self.fig.add_axes([
+                pos.x0,
+                0.02,
+                pos.width,
+                0.03
+            ])
+            self.x_slider = Slider(
+                self.slider_ax, "",
+                self.XLim[0], self.XLim[1],
+                valinit=self.initial_x,
+                valfmt="%.2f " + self.Xunit
+            )
+            self.x_slider.on_changed(self.update)
 
-        self.ax.set_xlabel("Time ({})".format(self.Xunit))
-
-        self.ax.grid("on", which="major", ls="-", color="k", alpha=0.3)
-        self.ax.grid("on", which="minor", ls=":", color="k", alpha=0.3)
-
+        # Containers for extra axes and curves
         self.Axis = {}
         self.Curve = {}
 
     def updateDataBoxes(self, x_value):
-
-        for curve in self.Curve.keys():
-
-            # get curve x, y data
-            x = self.Curve[curve]["Curve"].get_xdata()
-            y = self.Curve[curve]["Curve"].get_ydata()
-
-            y_value = np.interp(x_value, x, y)
-
-            self.Curve[curve]["ValueBox"].set_position((x_value, y_value))
-
-            if x_value > self.ax.get_xlim()[0] and x_value < self.ax.get_xlim()[1]:
-
-                self.Curve[curve]["ValueBox"].set_text("{:.3f}".format(y_value))
-
+        for data in self.Curve.values():
+            x = data['Curve'].get_xdata()
+            y = data['Curve'].get_ydata()
+            yv = np.interp(x_value, x, y)
+            vb = data['ValueBox']
+            vb.set_position((x_value, yv))
+            if self.XLim[0] <= x_value <= self.XLim[1]:
+                vb.set_text(f"{yv:.3f}")
             else:
-
-                self.Curve[curve]["ValueBox"].set_text("")
+                vb.set_text("")
 
     def update(self, val):
-
-        self.vline.set_xdata([val, val])  # Update x-position of the vertical line
+        # Move vertical line and update value boxes
+        self.vline.set_xdata([val, val])
         self.updateDataBoxes(val)
-        self.fig.canvas.draw_idle()  # Redraw the plot
+        self.fig.canvas.draw_idle()
 
-    def AddAxis(
-        self, Name, GridHeight=4, GridPos=0, Unit="", Position="Left", YLims="Auto", offset=0.02
-    ):
+    def AddAxis(self, Name,
+                GridHeight=1, GridPos=0,
+                Unit="", Position="Left",
+                YLims="Auto", offset=0.02):
+        """
+        Adds a sub-axis GridHeight data-grid cells tall,
+        centered on the GridPos'th cell (0-based).
+        GridHeight=1 -> one full rectangle high.
+        GridPos=k -> axis center at middle of k-th rectangle.
+        """
+        if Name in self.Axis:
+            print(f"Axis '{Name}' already exists")
+            return
 
-        if Name in self.Axis.keys():
+        # Ensure canvas is up-to-date before measuring
+        self.fig.canvas.draw()
 
-            print("Name already exists")
+        # Get current main axes position (in figure coords)
+        ext = self.ax.get_position()  # Bbox([x0, y0, x1, y1])
+        total_h = ext.y1 - ext.y0
+        cell_h = total_h / self.Ngridy
 
+        # Compute bottom so that the axis center lies at (GridPos + 0.5) * cell_h
+        bottom = ext.y0 + (GridPos + 0.5 - GridHeight/2) * cell_h
+        height = GridHeight * cell_h
+
+        # Create the new axes at the computed position
+        ax2 = self.fig.add_axes([
+            ext.x0,
+            bottom,
+            ext.width,
+            height
+        ])
+
+        # Label & styling
+        ax2.set_ylabel(f"{Name}\n{Unit}", labelpad=0)
+        auto = (YLims == "Auto")
+        lims = [-1, 1] if auto else YLims
+        ax2.set_ylim(lims)
+
+        # Three ticks: bottom, middle, top
+        yr = (lims[1] - lims[0]) / 2
+        ym = np.mean(lims)
+        ax2.set_yticks([ym - yr, ym, ym + yr])
+
+        # Share X-axis limits and hide labels
+        ax2.set_xlim(self.XLim)
+        ax2.set_xticks([])
+        ax2.set_xticklabels([])
+
+        # Remove top/bottom spines and background
+        for s in ('top', 'bottom'):
+            ax2.spines[s].set_visible(False)
+        ax2.patch.set_visible(False)
+
+        # Position left or right spine with offset
+        if Position.lower() == 'left':
+            ax2.spines['right'].set_visible(False)
+            ax2.spines['left'].set_bounds(ym - yr, ym + yr)
+            ax2.spines['left'].set_position(('axes', -offset))
         else:
+            ax2.yaxis.tick_right()
+            ax2.yaxis.set_label_position('right')
+            ax2.spines['left'].set_visible(False)
+            ax2.spines['right'].set_bounds(ym - 0.5*yr, ym + 0.5*yr)
+            ax2.spines['right'].set_position(('axes', 1 + offset))
 
-            self.Axis[Name] = {
-                "ax": self.fig.add_axes(
-                    [
-                        self.extent.x0,
-                        self.extent.y0
-                        + GridPos / (self.Ngridy - 0) * (self.extent.y1 - self.extent.y0),
-                        self.extent.x1 - self.extent.x0,
-                        GridHeight / (self.Ngridy - 0) * (self.extent.y1 - self.extent.y0),
-                    ]
-                ),
-                "Name": Name,
-                "Unit": Unit,
-                "AutoScale": YLims == "Auto",
-                "Position": Position,
-                "GridHeight": GridHeight,
-                "GridPos": GridPos,
-            }
-
-            self.Axis[Name]["ax"].set_ylabel(
-                self.Axis[Name]["Name"] + "\n" + self.Axis[Name]["Unit"], labelpad=0
-            )
-
-            # Adjust y scale
-
-            if YLims == "Auto":
-
-                YLims = [-1, 1]
-
-            self.Axis[Name]["ax"].set_ylim(YLims)
-
-            YRange = (YLims[1] - YLims[0]) / 2
-            Ymean = np.mean(YLims)
-
-            self.Axis[Name]["ax"].set_yticks([-0.5 * YRange + Ymean, Ymean, 0.5 * YRange + Ymean])
-
-            self.Axis[Name]["ax"].set_xlim(self.XLim)
-
-            self.Axis[Name]["ax"].set_xticks([])
-            self.Axis[Name]["ax"].set_xticklabels([])
-
-            self.Axis[Name]["ax"].spines["bottom"].set_visible(False)
-            self.Axis[Name]["ax"].spines["top"].set_visible(False)
-            self.Axis[Name]["ax"].patch.set_visible(False)
-
-            if Position == "Left":
-
-                self.Axis[Name]["ax"].spines["left"].set_bounds(
-                    -0.5 * YRange + Ymean, 0.5 * YRange + Ymean
-                )
-                self.Axis[Name]["ax"].spines["right"].set_visible(False)
-
-                self.Axis[Name]["ax"].spines["left"].set_position(("axes", -offset))
-
-            else:
-
-                self.Axis[Name]["ax"].yaxis.tick_right()
-                self.Axis[Name]["ax"].yaxis.set_label_position("right")
-                self.Axis[Name]["ax"].spines["right"].set_bounds(
-                    -0.5 * YRange + Ymean, 0.5 * YRange + Ymean
-                )
-                self.Axis[Name]["ax"].spines["left"].set_visible(False)
-
-                self.Axis[Name]["ax"].spines["right"].set_position(("axes", 1 + offset))
+        # Store reference for future curves & autoscale
+        self.Axis[Name] = {
+            'ax': ax2,
+            'Name': Name,
+            'Unit': Unit,
+            'AutoScale': auto,
+            'Position': Position,
+            'GridHeight': GridHeight,
+            'GridPos': GridPos
+        }
 
     def AddCurve(self, Name, Axis, Xdata, Ydata, **kwargs):
+        if Name in self.Curve:
+            print(f"Curve '{Name}' already exists")
+            return
+        ax2 = self.Axis[Axis]['ax']
+        line, = ax2.plot(Xdata, Ydata, **kwargs)
 
-        if Name in self.Curve.keys():
+        # Static label in the middle
+        idx = np.random.randint(len(Xdata)//4, int(len(Xdata)*0.75))
+        ax2.text(
+            Xdata[idx], Ydata[idx], Name,
+            ha='center', va='center', color=line.get_color(),
+            bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1')
+        )
 
-            print("Name already exists")
+        # Dynamic value box at start
+        vb = ax2.text(
+            Xdata[0], Ydata[0], '',
+            ha='center', va='center', color=line.get_color(),
+            bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
+        )
+        self.Curve[Name] = {'Curve': line, 'Axis': Axis, 'ValueBox': vb}
 
-        else:
-
-            (C,) = self.Axis[Axis]["ax"].plot(Xdata, Ydata, **kwargs)
-
-            idx = np.random.randint(len(Xdata) // 4, int(len(Xdata) * 0.75))
-
-            Label = self.Axis[Axis]["ax"].text(
-                Xdata[idx],
-                Ydata[idx],
-                Name,
-                ha="center",
-                va="center",
-                color=C.get_color(),
-                bbox=dict(facecolor="w", edgecolor="w", boxstyle="round,pad=0.1"),
-            )
-
-            ValueBox = self.Axis[Axis]["ax"].text(
-                Xdata[0],
-                Ydata[0],
-                "",
-                ha="center",
-                va="center",
-                color=C.get_color(),
-                bbox=dict(facecolor="w", edgecolor="w", boxstyle="round,pad=0.1", alpha=1.0),
-            )
-
-            self.Curve[Name] = {"Curve": C, "Axis": Axis, "Label": Label, "ValueBox": ValueBox}
-
+        # Auto-scale if needed
+        if self.Axis[Axis]['AutoScale']:
             self.UpdateAxis(Axis)
 
     def UpdateAxis(self, Axis):
+        info = self.Axis[Axis]
+        ax2 = info['ax']
+        if not info['AutoScale']:
+            return
+        ax2.set_autoscaley_on(True)
+        ax2.relim()
+        ax2.autoscale_view()
 
-        if self.Axis[Axis]["AutoScale"]:
+        nb = info['GridHeight'] + 1
+        ax2.yaxis.set_major_locator(MaxNLocator(nbins=nb))
+        yt = ax2.get_yticks()
+        ax2.set_ylim(yt[0], yt[-1])
 
-            self.Axis[Axis]["ax"].set_autoscaley_on(True)
-            self.Axis[Axis]["ax"].relim()
+        # Recompute three-tick scheme
+        YL = ax2.get_ylim()
+        rng = (YL[1] - YL[0]) / 2
+        mid = np.mean(YL)
+        ax2.set_yticks([mid - 0.5*rng, mid, mid + 0.5*rng])
 
-            Nbins = self.Axis[Axis]["GridHeight"] + 1
-
-            self.Axis[Axis]["ax"].yaxis.set_major_locator(MaxNLocator(nbins=Nbins))
-            self.Axis[Axis]["ax"].autoscale_view()
-
-            yticks = self.Axis[Axis]["ax"].get_yticks()
-
-            self.Axis[Axis]["ax"].set_ylim([yticks[0], yticks[-1]])
-
-            YLims = self.Axis[Axis]["ax"].get_ylim()
-            YRange = (YLims[1] - YLims[0]) / 2
-            Ymean = np.mean(YLims)
-
-            self.Axis[Axis]["ax"].set_yticks([-0.5 * YRange + Ymean, Ymean, 0.5 * YRange + Ymean])
-
-            if self.Axis[Axis]["Position"] == "Left":
-
-                self.Axis[Axis]["ax"].spines["left"].set_bounds(
-                    -0.5 * YRange + Ymean, 0.5 * YRange + Ymean
-                )
-
-            else:
-
-                self.Axis[Axis]["ax"].spines["right"].set_bounds(
-                    -0.5 * YRange + Ymean, 0.5 * YRange + Ymean
-                )
+        # Adjust spine length
+        spine = 'left' if info['Position'].lower()=='left' else 'right'
+        ax2.spines[spine].set_bounds(mid - 0.5*rng, mid + 0.5*rng)
 
 
-"""
-plt.close('all')
+if __name__ == "__main__":
+
+    matplotlib.use('Qt5Agg')
+    plt.ion()
+    plt.close('all')
+    fig, ax = plt.subplots()
 
 
-fig,ax = plt.subplots()
+    Fdr = FTPlot(fig, ax,slider=True)
 
+    Fdr.AddAxis(Name='Axis 1',GridHeight=1,GridPos=1,Unit='m/s')
+    Fdr.AddAxis(Name='Axis 2',GridPos=3,Unit='m/s',Position='Right')
+    Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=.1)
 
-Fdr = FDRplot(ax,slider=True)
+    Xdata = np.linspace(0,1)
+    Ydata = 3.7 * np.cos(13 * Xdata)
 
-Fdr.AddAxis(Name='Axis 1',GridHeight=6,GridPos=.5,Unit='m/s')
-Fdr.AddAxis(Name='Axis 2',GridPos=3,Unit='m/s',Position='Right')
-Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=.1)
+    Fdr.AddCurve('C1','Axis 1',Xdata,Ydata)
+    Fdr.AddCurve('C2','Axis 2',Xdata,Ydata,color='r')
+    Fdr.AddCurve('C3','Axis 3',Xdata,Ydata,color='m')
 
-Xdata = np.linspace(0,1)
-Ydata = 3.7 * np.cos(13 * Xdata)
-
-Fdr.AddCurve('C1','Axis 1',Xdata,Ydata)
-Fdr.AddCurve('C2','Axis 2',Xdata,Ydata,color='r')
-Fdr.AddCurve('C3','Axis 3',Xdata,Ydata,color='m')
-"""
