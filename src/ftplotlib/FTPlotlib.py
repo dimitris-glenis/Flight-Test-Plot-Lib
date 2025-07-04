@@ -33,8 +33,10 @@ class FTPlot:
         plt.subplots_adjust(left=0.15, right=0.85, top=0.95)
         if self.slider:
             ext = ax.get_position()
-            plt.subplots_adjust(bottom=0.15,
-                                top=ext.y1 + 0.15 - ext.y0)
+            plt.subplots_adjust(
+                bottom=0.15,
+                top=ext.y1 + 0.15 - ext.y0
+            )
 
         # Main grid
         ax.set_xlim(self.XLim)
@@ -51,15 +53,15 @@ class FTPlot:
         # Slider line and control
         if self.slider:
             self.initial_x = self.XLim[0]
-            self.vline = ax.axvline(self.initial_x,
-                                     color='red', linestyle='--')
+            self.vline = ax.axvline(self.initial_x, color='red', linestyle='--')
             ext = ax.get_position()
-            self.slider_ax = fig.add_axes([
-                ext.x0, 0.02, ext.width, 0.03])
-            self.x_slider = Slider(self.slider_ax, "",
-                                   self.XLim[0], self.XLim[1],
-                                   valinit=self.initial_x,
-                                   valfmt=f"%.2f {self.Xunit}")
+            self.slider_ax = fig.add_axes([ext.x0, 0.02, ext.width, 0.03])
+            self.x_slider = Slider(
+                self.slider_ax, "",
+                self.XLim[0], self.XLim[1],
+                valinit=self.initial_x,
+                valfmt=f"%.2f {self.Xunit}"
+            )
             self.x_slider.on_changed(self.update)
 
         # Storage for sub-axes and curves
@@ -101,7 +103,7 @@ class FTPlot:
         cell_h = ext.height / self.Ngridy
         center = ext.y0 + (GridPos + 0.5) * cell_h
         height = GridHeight * cell_h
-        bottom = center - height/2
+        bottom = center - height / 2
         ax2 = self.fig.add_axes([ext.x0, bottom, ext.width, height])
 
         # Y-limits setup
@@ -110,34 +112,38 @@ class FTPlot:
         # disable autoscaling until AddCurve
         ax2.set_autoscaley_on(False)
 
-        # Ticks
-        mid = sum(lims)/2
+        # Ticks: bottom, middle, top
+        mid = (lims[0] + lims[1]) / 2
         rng = (lims[1] - lims[0]) / 2
         ax2.set_yticks([mid - rng, mid, mid + rng])
 
         # X-share and hide labels
         ax2.set_xlim(self.XLim)
-        ax2.set_xticks([]); ax2.set_xticklabels([])
+        ax2.set_xticks([])
+        ax2.set_xticklabels([])
 
         # Label & spines
         ax2.set_ylabel(f"{Name}\n{Unit}", labelpad=0)
-        for s in ('top','bottom'): ax2.spines[s].set_visible(False)
+        for s in ('top', 'bottom'):
+            ax2.spines[s].set_visible(False)
         ax2.patch.set_visible(False)
-        if Position.lower()=='left':
+        if Position.lower() == 'left':
             ax2.spines['right'].set_visible(False)
             ax2.spines['left'].set_bounds(lims[0], lims[1])
-            ax2.spines['left'].set_position(('axes',-offset))
+            ax2.spines['left'].set_position(('axes', -offset))
         else:
-            ax2.yaxis.tick_right(); ax2.yaxis.set_label_position('right')
+            ax2.yaxis.tick_right()
+            ax2.yaxis.set_label_position('right')
             ax2.spines['left'].set_visible(False)
             ax2.spines['right'].set_bounds(lims[0], lims[1])
-            ax2.spines['right'].set_position(('axes',1+offset))
+            ax2.spines['right'].set_position(('axes', 1 + offset))
 
         self.Axis[Name] = {
             'ax': ax2,
             'AutoScale': (YLims == 'Auto'),
             'GridHeight': GridHeight,
-            'GridPos': GridPos
+            'GridPos': GridPos,
+            'Position': Position
         }
 
     def AddCurve(self, Name, Axis, Xdata, Ydata, **kwargs):
@@ -149,7 +155,7 @@ class FTPlot:
         (line,) = ax2.plot(Xdata, Ydata, **kwargs)
 
         # Static label in the middle of the curve
-        idx = len(Xdata)//2
+        idx = len(Xdata) // 2
         ax2.text(
             Xdata[idx], Ydata[idx], Name,
             ha='center', va='center', color=line.get_color(),
@@ -164,19 +170,15 @@ class FTPlot:
         self.Curve[Name] = {'Curve': line, 'ValueBox': vb}
 
         # Manual autoscale within the fixed axis height
-        if self.Axis[Axis]['AutoScale']:
-            # Compute data range
+        info = self.Axis[Axis]
+        if info['AutoScale']:
             data_min = np.min(Ydata)
             data_max = np.max(Ydata)
-            # Set axis limits to data extremes
             ax2.set_ylim(data_min, data_max)
-            # Three ticks: bottom, middle, top
             mid = 0.5 * (data_min + data_max)
             yr = 0.5 * (data_max - data_min)
             ax2.set_yticks([mid - yr, mid, mid + yr])
-            # Adjust spine bounds to full data range
-            info = self.Axis[Axis]
-            spine = 'left' if info.get('Position', 'left').lower()=='left' else 'right'
+            spine = 'left' if info['Position'].lower() == 'left' else 'right'
             ax2.spines[spine].set_bounds(data_min, data_max)
 
     def _on_resize(self, event):
@@ -184,7 +186,8 @@ class FTPlot:
         for info in self.Axis.values():
             if info['AutoScale']:
                 ax2 = info['ax']
-                ax2.relim(); ax2.autoscale_view()
+                ax2.relim()
+                ax2.autoscale_view()
                 nb = info['GridHeight'] + 1
                 ax2.yaxis.set_major_locator(MaxNLocator(nbins=nb))
 
