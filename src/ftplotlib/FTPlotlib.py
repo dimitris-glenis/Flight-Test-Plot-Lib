@@ -168,6 +168,33 @@ class FTPlot:
             ax2.set_ylim(lo, hi)
             ax2.set_yticks([lo, (lo + hi) / 2, hi])
 
+    def RemoveCurve(self, Name):
+
+        if Name not in self.Curve:
+            print(f"No curve named '{Name}' exists")
+            return
+
+        entry = self.Curve.pop(Name)
+        # Remove the curve itself
+        if 'Curve' in entry and entry['Curve'] is not None:
+            entry['Curve'].remove()
+
+        # Remove the value box text
+        if 'ValueBox' in entry and entry['ValueBox'] is not None:
+            entry['ValueBox'].remove()
+
+        # Find and remove the curve label (text annotation near the middle of the curve)
+        for ax in self.fig.axes:
+            for text in ax.texts:
+                if text.get_text() == Name:
+                    text.remove()
+                    break
+
+        self.fig.canvas.draw_idle()
+
+
+
+
     def enable_autoscale(self, Name):
         """Re-enable autoscale for sub-axis and apply padding."""
         if Name not in self.Axis:
@@ -222,9 +249,7 @@ if __name__ == "__main__":
     Fdr.AddAxis(Name='Axis 2',GridPos=3,Unit='m/s',Position='Right')
     Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=.1)
 
-
-
-
     Fdr.AddCurve('C2','Axis 2',Xdata,Ydata,color='r')
+    Fdr.RemoveCurve('C1')
     Fdr.AddCurve('C3','Axis 3',Xdata,Ydata,color='m')
 
