@@ -71,7 +71,12 @@ class FTPlot:
         self.fig.canvas.mpl_connect('resize_event', self._on_resize)
 
     def updateDataBoxes(self, t):
-        for data in self.Curve.values():
+        for name, data in self.Curve.items():
+            # Skip vertical lines - their value boxes should remain fixed
+            if data.get('IsVerticalLine', False):
+                continue
+
+            # For regular curves, update as before
             x, y = data['Curve'].get_xdata(), data['Curve'].get_ydata()
             yv = np.interp(t, x, y)
             vb = data['ValueBox']
@@ -168,13 +173,90 @@ class FTPlot:
             ax2.set_ylim(lo, hi)
             ax2.set_yticks([lo, (lo + hi) / 2, hi])
 
-    def RemoveCurve(self, Name):
+    def AddVerticalLine(self, Name, Xpos, YLims=None, linestyle='--', marker=None, **kwargs):
+        """
+        Add a vertical line at Xpos on the main axis.
+        Optionally specify YLims to set the vertical limits of the line.
+        """
+        if Name in self.Curve:
+            print(f"Vertical line '{Name}' already exists")
+            return
 
+        if YLims is None:
+            YLims = self.ax.get_ylim()
+
+        # Apply default linestyle if not specified in kwargs
+        if 'linestyle' not in kwargs and 'ls' not in kwargs:
+            kwargs['linestyle'] = linestyle
+
+        line = self.ax.axvline(Xpos, ymin=YLims[0], ymax=YLims[1], **kwargs)
+
+        y_pos = YLims[0] - 0.05
+        vb = self.ax.text(
+            Xpos, y_pos, f"{Xpos:.3f}",
+            ha='center', va='top', color=line.get_color(),
+            bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
+        )
+
+        # Initialize intersections dictionary
+        intersections = {}
+
+        # Create dictionary to store intersection data
+        self.Curve[Name] = {
+            'Curve': line,
+            'ValueBox': vb,
+            'IsVerticalLine': True,
+            'XPosition': Xpos,
+            'Intersections': intersections
+        }
+
+        # Add markers at intersections with existing curves
+        for curve_name, data in self.Curve.items():
+            # Skip the vertical line itself and other vertical lines
+            if curve_name == Name or data.get('IsVerticalLine', False):
+                continue
+
+            try:
+                # Get curve data
+                curve = data['Curve']
+                x_data = curve.get_xdata()
+                y_data = curve.get_ydata()
+
+                # Check if Xpos is within curve x range
+                if Xpos >= min(x_data) and Xpos <= max(x_data):
+                    # Interpolate to find y value at the vertical line position
+                    y_val = np.interp(Xpos, x_data, y_data)
+
+                    # Add marker at intersection point if marker is specified
+                    mark = None
+                    if marker is not None:
+                        mark = curve.axes.plot([Xpos], [y_val], marker, color=curve.get_color(),
+                                               markersize=6, zorder=10)[0]
+
+                    # Create a text annotation for the intersection
+                    intersection_box = curve.axes.text(
+                        Xpos, y_val, f"{y_val:.3f}",
+                        ha='left', va='bottom', color=curve.get_color(),
+                        bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
+                    )
+
+                    # Store references to the marker and text
+                    intersections[curve_name] = {
+                        'marker': mark,
+                        'text': intersection_box
+                    }
+            except:
+                pass
+
+        self.fig.canvas.draw_idle()
+
+    def RemoveCurve(self, Name):
         if Name not in self.Curve:
             print(f"No curve named '{Name}' exists")
             return
 
         entry = self.Curve.pop(Name)
+
         # Remove the curve itself
         if 'Curve' in entry and entry['Curve'] is not None:
             entry['Curve'].remove()
@@ -183,7 +265,23 @@ class FTPlot:
         if 'ValueBox' in entry and entry['ValueBox'] is not None:
             entry['ValueBox'].remove()
 
-        # Find and remove the curve label (text annotation near the middle of the curve)
+        # Remove intersection markers and value boxes if this is a vertical line
+        if 'Intersections' in entry:
+            for intersection in entry['Intersections'].values():
+                if 'marker' in intersection and intersection['marker'] is not None:
+                    intersection['marker'].remove()
+                if 'text' in intersection and intersection['text'] is not None:
+                    intersection['text'].remove()
+
+        # Remove intersection references if this is a regular curve
+        for other_name, other_data in self.Curve.items():
+            if other_data.get('IsVerticalLine', False) and 'Intersections' in other_data:
+                if Name in other_data['Intersections']:
+                    other_data['Intersections'][Name]['marker'].remove()
+                    other_data['Intersections'][Name]['text'].remove()
+                    del other_data['Intersections'][Name]
+
+        # Find and remove the curve label
         for ax in self.fig.axes:
             for text in ax.texts:
                 if text.get_text() == Name:
@@ -191,9 +289,6 @@ class FTPlot:
                     break
 
         self.fig.canvas.draw_idle()
-
-
-
 
     def enable_autoscale(self, Name):
         """Re-enable autoscale for sub-axis and apply padding."""
@@ -247,9 +342,12 @@ if __name__ == "__main__":
     Fdr.AddAxis(Name='Axis 1',GridHeight=1,GridPos=1,Unit='m/s')
     Fdr.AddCurve('C1', 'Axis 1', Xdata, Ydata)
     Fdr.AddAxis(Name='Axis 2',GridPos=3,Unit='m/s',Position='Right')
+    Fdr.AddCurve('C2', 'Axis 2', Xdata, Ydata, color='r')
     Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=.1)
+    Fdr.AddCurve('C3', 'Axis 3', Xdata, Ydata, color='m')
 
-    Fdr.AddCurve('C2','Axis 2',Xdata,Ydata,color='r')
     Fdr.RemoveCurve('C1')
-    Fdr.AddCurve('C3','Axis 3',Xdata,Ydata,color='m')
+    Fdr.AddVerticalLine(Name='0.5', Xpos=0.5, linestyle='--')
+    Fdr.AddVerticalLine(Name='0.7', Xpos=0.7, linestyle=':', color='green')
+    Fdr.AddVerticalLine(Name='0.3', Xpos=0.3, linestyle='-.', marker='s', color='blue')
 
