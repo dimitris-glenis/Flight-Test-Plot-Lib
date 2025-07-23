@@ -63,6 +63,11 @@ class FTPlot:
         self.Axis = {}
         self.Curve = {}
         self.fig.canvas.mpl_connect('resize_event', self._on_resize)
+        # setup interactive label dragging
+        self._dragging = None
+        self.fig.canvas.mpl_connect('pick_event', self._on_pick)
+        self.fig.canvas.mpl_connect('motion_notify_event', self._on_motion)
+        self.fig.canvas.mpl_connect('button_release_event', self._on_release)
 
     def updateDataBoxes(self, t):
         for entry in self.Curve.values():
@@ -132,6 +137,7 @@ class FTPlot:
             ha='center', va='center', color=line.get_color(),
             bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1')
         )
+        lbl.set_picker(True)
         vb = ax2.text(
             Xdata[0], Ydata[0], '',
             ha='center', va='center', color=line.get_color(),
@@ -195,6 +201,17 @@ class FTPlot:
         info = self.Axis[Name]
         info['GridHeight'] = GridHeight
         self._resize_axis(Name)
+        self.fig.canvas.draw_idle()
+
+    def SetLabelPosition(self, Name, x, y):
+        """
+        Manually reposition the text label for curve 'Name'.
+        """
+        if Name not in self.Curve:
+            print(f"No such curve '{Name}'")
+            return
+        lbl = self.Curve[Name]['Label']
+        lbl.set_position((x, y))
         self.fig.canvas.draw_idle()
 
     def enable_autoscale(self, Name):
@@ -261,6 +278,28 @@ class FTPlot:
                 ax2.set_ylim(lo, hi)
                 ax2.set_yticks([lo, (lo + hi) / 2, hi])
 
+    def _on_pick(self, event):
+        """Start dragging a picked label."""
+        if isinstance(event.artist, plt.Text):
+            self._dragging = event.artist
+
+    def _on_motion(self, event):
+        """Drag the picked label with the mouse."""
+        if self._dragging and event.inaxes == self._dragging.axes:
+            self._dragging.set_position((event.xdata, event.ydata))
+            self.fig.canvas.draw_idle()
+
+    def _on_release(self, event):
+        """Release the dragged label."""
+        self._dragging = None
+        for Name, info in self.Axis.items():
+            if info['AutoScale']:
+                ax2 = info['ax']
+                y_all = np.hstack([ln.get_ydata() for ln in ax2.get_lines()])
+                lo, hi = np.floor(y_all.min()), np.ceil(y_all.max())
+                ax2.set_ylim(lo, hi)
+                ax2.set_yticks([lo, (lo + hi) / 2, hi])
+
 
 if __name__ == "__main__":
 
@@ -287,4 +326,5 @@ if __name__ == "__main__":
     Fdr.AddVerticalLine(Name='0.5', Xpos=0.5, linestyle='--')
     Fdr.AddVerticalLine(Name='0.7', Xpos=0.7, linestyle=':', color='green')
     Fdr.AddVerticalLine(Name='0.3', Xpos=0.3, linestyle='-.', marker='s', color='blue')
+    Fdr.SetLabelPosition('C2', 0.5, 0.8)
 
