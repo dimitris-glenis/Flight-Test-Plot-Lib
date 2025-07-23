@@ -35,6 +35,7 @@ class FTPlot:
             ext = ax.get_position()
             plt.subplots_adjust(bottom=0.15, top=ext.y1 + 0.15 - ext.y0)
 
+        # set up main grid
         self.ax.set_xlim(XLim)
         self.ax.set_ylim(0, 1)
         self.ax.set_xticks(np.linspace(XLim[0], XLim[1], Ngridx + 1))
@@ -46,18 +47,16 @@ class FTPlot:
         self.ax.grid(True, which='major', ls='-', color='k', alpha=0.3)
         self.ax.grid(True, which='minor', ls=':', color='k', alpha=0.3)
 
-        # slider
+        # optional slider
         if slider:
-            self.initial_x = self.XLim[0]
+            self.initial_x = XLim[0]
             self.vline = ax.axvline(self.initial_x, color='red', linestyle='--')
             ext = ax.get_position()
             self.slider_ax = fig.add_axes([ext.x0, 0.02, ext.width, 0.03])
-            self.x_slider = Slider(
-                self.slider_ax, "",
-                self.XLim[0], self.XLim[1],
-                valinit=self.initial_x,
-                valfmt=f"%.2f {self.Xunit}"
-            )
+            self.x_slider = Slider(self.slider_ax, "",
+                                   XLim[0], XLim[1],
+                                   valinit=self.initial_x,
+                                   valfmt=f"%.2f {Xunit}")
             self.x_slider.on_changed(self.update)
 
         # containers
@@ -112,7 +111,8 @@ class FTPlot:
             ax2.spines['right'].set_visible(False)
             ax2.spines['left'].set_position(('axes', -offset))
         else:
-            ax2.yaxis.tick_right(); ax2.yaxis.set_label_position('right')
+            ax2.yaxis.tick_right()
+            ax2.yaxis.set_label_position('right')
             ax2.spines['left'].set_visible(False)
             ax2.spines['right'].set_position(('axes', 1 + offset))
 
@@ -122,11 +122,11 @@ class FTPlot:
 
     def AddCurve(self, Name, Axis, Xdata, Ydata, **kwargs):
         """
-        Plot on sub-axis; auto-rescale y-limits to data min/max.
+        Plot on sub-axis; auto-rescale y-limits to include all curves on that axis,
+        but keep axis height constant.
         """
         ax2 = self.Axis[Axis]['ax']
         line, = ax2.plot(Xdata, Ydata, **kwargs)
-        # static label
         lbl = ax2.text(
             Xdata[len(Xdata)//2], Ydata[len(Ydata)//2], Name,
             ha='center', va='center', color=line.get_color(),
@@ -139,10 +139,11 @@ class FTPlot:
         )
         self.Curve[Name] = dict(Curve=line, Label=lbl, ValueBox=vb)
 
-        # recompute axis limits only
+        # recompute y-limits across all curves on this axis
         info = self.Axis[Axis]
         if info['AutoScale']:
-            dmin, dmax = np.min(Ydata), np.max(Ydata)
+            y_all = np.hstack([ln.get_ydata() for ln in ax2.get_lines()])
+            dmin, dmax = y_all.min(), y_all.max()
             lo, hi = np.floor(dmin), np.ceil(dmax)
             ax2.set_ylim(lo, hi)
             ax2.set_yticks([lo, (lo + hi) / 2, hi])
@@ -200,8 +201,8 @@ class FTPlot:
         if Name not in self.Axis: return
         self.Axis[Name]['AutoScale'] = True
         ax2 = self.Axis[Name]['ax']
-        ys = np.hstack([ln.get_ydata() for ln in ax2.get_lines()])
-        lo, hi = np.floor(ys.min()), np.ceil(ys.max())
+        y_all = np.hstack([ln.get_ydata() for ln in ax2.get_lines()])
+        lo, hi = np.floor(y_all.min()), np.ceil(y_all.max())
         ax2.set_ylim(lo, hi)
 
     def AddVerticalLine(self, Name, Xpos, YLims=None, linestyle='--', marker=None, **kwargs):
@@ -255,10 +256,10 @@ class FTPlot:
         for Name, info in self.Axis.items():
             if info['AutoScale']:
                 ax2 = info['ax']
-                ys = np.hstack([ln.get_ydata() for ln in ax2.get_lines()])
-                lo, hi = np.floor(ys.min()), np.ceil(ys.max())
+                y_all = np.hstack([ln.get_ydata() for ln in ax2.get_lines()])
+                lo, hi = np.floor(y_all.min()), np.ceil(y_all.max())
                 ax2.set_ylim(lo, hi)
-                self._resize_axis(Name)
+                ax2.set_yticks([lo, (lo + hi) / 2, hi])
 
 
 if __name__ == "__main__":
