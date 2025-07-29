@@ -294,7 +294,7 @@ class FTPlot:
                 ax2.set_ylim(lo, hi)
                 ax2.set_yticks([lo, (lo + hi) / 2, hi])
 
-    def AddFooter(self, info_dict, fontsize=8, color='gray', pad=0.5, wrap_width=80):
+    def AddFooter(self, info_dict, fontsize=8, color='gray', pad=0.5, wrap_width=150):
         """
         Place a multi‑line footer immediately under the x‑axis LABEL.
         - info_dict: metadata dict (one key per line)
