@@ -24,6 +24,7 @@ class FTPlot:
                  Ngridx=10, Ngridy=13,
                  XLim=(0, 1), slider=False, Xunit="s"):
         # core references
+        fig.set_constrained_layout(False)
         self.fig = fig
         self.ax = ax
         self.Ngridx = Ngridx
@@ -33,10 +34,10 @@ class FTPlot:
         self.slider = slider
 
         # adjust main axes
-        plt.subplots_adjust(left=0.15, right=0.85, top=0.95)
-        if slider:
-            ext = ax.get_position()
-            plt.subplots_adjust(bottom=0.15, top=ext.y1 + 0.15 - ext.y0)
+        # plt.subplots_adjust(left=0.15, right=0.85, top=0.95)
+        # if slider:
+        #     ext = ax.get_position()
+        #     plt.subplots_adjust(bottom=0.15, top=ext.y1 + 0.15 - ext.y0)
 
         # set up main grid
         self.ax.set_xlim(XLim)
@@ -53,14 +54,32 @@ class FTPlot:
         # optional slider
         if slider:
             self.initial_x = XLim[0]
+          # 1) draw the slider line
             self.vline = ax.axvline(self.initial_x, color='red', linestyle='--')
+
+          # 2) create its ValueBox up front (hidden at t=0)
+            y_min = self.ax.get_ylim()[0]
+            self.slider_vb = ax.text(
+                self.initial_x, y_min, "",
+                ha = "center", va = "top", color = "red",
+                bbox = dict(facecolor="white", edgecolor="white",
+                boxstyle = "round,pad=0.1", alpha = 1.0),
+                visible = False
+            )
+
+          # 3) add the Matplotlib slider widget
             ext = ax.get_position()
             self.slider_ax = fig.add_axes([ext.x0, 0.02, ext.width, 0.03])
-            self.x_slider = Slider(self.slider_ax, "",
-                                   XLim[0], XLim[1],
-                                   valinit=self.initial_x,
-                                   valfmt=f"%.2f {Xunit}")
+            self.x_slider = Slider(
+                self.slider_ax, "",
+                XLim[0], XLim[1],
+                valinit = self.initial_x,
+                valfmt = f"%.2f {Xunit}"
+            )
             self.x_slider.on_changed(self.update)
+
+            # Initialize container for slider intersections with curves
+            self.slider_intersections = {}
 
         # containers
         self.Axis = {}
@@ -73,15 +92,67 @@ class FTPlot:
         self.fig.canvas.mpl_connect('button_release_event', self._on_release)
 
     def updateDataBoxes(self, t):
-        for entry in self.Curve.values():
+        for name, entry in self.Curve.items():
+            # Skip vertical lines - they have their own text that should stay visible
+            if entry.get('IsVerticalLine', False):
+                continue
+
             x, y = entry['Curve'].get_xdata(), entry['Curve'].get_ydata()
             yv = np.interp(t, x, y)
             vb = entry['ValueBox']
             vb.set_position((t, yv))
             vb.set_text(f"{yv:.3f}" if self.XLim[0] <= t <= self.XLim[1] else "")
 
+        # Handle slider intersections with curves
+        if hasattr(self, 'slider_intersections') and self.slider_intersections:
+            # Update or hide all intersection points for the slider
+            for curve_name, intersection in self.slider_intersections.items():
+                if t == self.XLim[0]:
+                    # Hide at t=0
+                    intersection['text'].set_visible(False)
+                    if intersection.get('marker'):
+                        intersection['marker'].set_visible(False)
+                else:
+                    # Show and update at other positions
+                    curve_data = self.Curve.get(curve_name)
+                    if curve_data and not curve_data.get('IsVerticalLine', False):
+                        curve = curve_data['Curve']
+                        x_data = curve.get_xdata()
+                        y_data = curve.get_ydata()
+                        if t >= min(x_data) and t <= max(x_data):
+                            y_val = np.interp(t, x_data, y_data)
+                            intersection['text'].set_position((t, y_val))
+                            intersection['text'].set_text(f"{y_val:.3f}")
+                            intersection['text'].set_visible(True)
+                            if intersection.get('marker'):
+                                intersection['marker'].set_visible(True)
+                                intersection['marker'].set_data([t], [y_val])
+                        else:
+                            # Hide if outside curve range
+                            intersection['text'].set_visible(False)
+                            if intersection.get('marker'):
+                                intersection['marker'].set_visible(False)
+
     def update(self, val):
+        """
+        Called when the slider moves. Updates slider line, shows/hides only the slider's value box and intersections at t=0,
+        updates all curve value boxes, but leaves other vertical lines and their intersections untouched.
+        """
         self.vline.set_xdata([val, val])
+
+        # Show/hide the slider's own ValueBox
+        if val == self.XLim[0]:
+            # Hide only the slider's own value box at t=0
+            self.slider_vb.set_visible(False)
+        else:
+            # Show and update text + position for slider's value box
+            y_min = self.ax.get_ylim()[0]
+            self.slider_vb.set_text(f"{val:.3f}")
+            self.slider_vb.set_position((val, y_min))
+            self.slider_vb.set_visible(True)
+
+        # Always update the data boxes (including intersections) - this will handle hiding/showing
+        # the intersection value boxes based on slider position
         self.updateDataBoxes(val)
         self.fig.canvas.draw_idle()
 
@@ -126,7 +197,7 @@ class FTPlot:
 
         self.Axis[Name] = dict(ax=ax2, GridHeight=GridHeight,
                                GridPos=GridPos, Position=Position,
-                               AutoScale=True)
+                               AutoScale=True, offset=offset)
 
     def AddCurve(self, Name, Axis, Xdata, Ydata, **kwargs):
         """
@@ -147,6 +218,18 @@ class FTPlot:
             bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
         )
         self.Curve[Name] = dict(Curve=line, Label=lbl, ValueBox=vb)
+
+        # Add slider intersection point if slider exists
+        if hasattr(self, 'slider') and self.slider and hasattr(self, 'slider_intersections'):
+            slider_pos = self.x_slider.val
+            if slider_pos > self.XLim[0]:  # Only create if slider not at 0
+                y_val = np.interp(slider_pos, Xdata, Ydata)
+                ib = ax2.text(
+                    slider_pos, y_val, f"{y_val:.3f}",
+                    ha='left', va='bottom', color=line.get_color(),
+                    bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
+                )
+                self.slider_intersections[Name] = {'text': ib}
 
         # recompute y-limits across all curves on this axis
         info = self.Axis[Axis]
@@ -234,11 +317,16 @@ class FTPlot:
         if 'linestyle' not in kwargs and 'ls' not in kwargs:
             kwargs['linestyle'] = linestyle
         line = self.ax.axvline(Xpos, **kwargs)
+
+        # Value box showing the x-position (this is the only label we'll keep)
         vb = self.ax.text(
             Xpos, YLims[0] - 0.05, f"{Xpos:.3f}",
             ha='center', va='top', color=line.get_color(),
             bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
         )
+        # Make the value box draggable
+        vb.set_picker(True)
+
         intersections = {}
         self.Curve[Name] = {'Curve': line, 'ValueBox': vb, 'IsVerticalLine': True, 'XPosition': Xpos, 'Intersections': intersections}
         for curve_name, data in self.Curve.items():
@@ -258,6 +346,9 @@ class FTPlot:
                         ha='left', va='bottom', color=curve.get_color(),
                         bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.1', alpha=1.0)
                     )
+                    # Make the intersection value boxes draggable too
+                    ib.set_picker(True)
+
                     intersections[curve_name] = {'marker': mark, 'text': ib}
             except:
                 pass
@@ -279,9 +370,18 @@ class FTPlot:
 
     def _on_motion(self, event):
         """Drag the picked label with the mouse."""
-        if self._dragging and event.inaxes == self._dragging.axes:
-            self._dragging.set_position((event.xdata, event.ydata))
-            self.fig.canvas.draw_idle()
+        if self._dragging is None or event.x is None or event.y is None:
+            return
+
+        txt = self._dragging
+        ax = txt.axes
+
+        # convert mouse pixel → data coords in the text's own axes
+        inv = ax.transData.inverted()
+        xdata, ydata = inv.transform((event.x, event.y))
+
+        txt.set_position((xdata, ydata))
+        self.fig.canvas.draw_idle()
 
     def _on_release(self, event):
         """Release the dragged label."""
@@ -292,187 +392,369 @@ class FTPlot:
                 y_all = np.hstack([ln.get_ydata() for ln in ax2.get_lines()])
                 lo, hi = np.floor(y_all.min()), np.ceil(y_all.max())
                 ax2.set_ylim(lo, hi)
-                ax2.set_yticks([lo, (lo + hi) / 2, hi])
+                ax2.set_yticks([lo, 0.5*(lo+hi), hi])
 
-    def AddFooter(self, info_dict, fontsize=8, color='gray', pad=0.5, wrap_width=150):
-        """
-        Place a multi‑line footer immediately under the x‑axis LABEL.
-        - info_dict: metadata dict (one key per line)
-        - fontsize, color: styling
-        - pad: fraction of the label's height to separate the footer
-        - wrap_width: target wrap chars × fraction of axis width
-        """
-        # Store footer info for resize events
-        self._footer_metadata = (info_dict, fontsize, color, pad, wrap_width)
+    def AddFooter(self, info_dict, fontsize=8, color='gray',
+                      pad=0.5, wrap_width=150):
+            """
+            Place a multi‑line footer immediately under the x‑axis LABEL.
+            - info_dict: metadata dict (one key per line)
+            - fontsize, color: styling
+            - pad: fraction of the label's height to separate the footer
+            - wrap_width: target wrap chars × fraction of axis width
+            """
+            # Store footer info for resize events
+            self._footer_metadata = (info_dict, fontsize, color, pad, wrap_width)
 
-        # Remove any old footer texts
-        for txt in getattr(self, '_footer_texts', []):
-            txt.remove()
-        self._footer_texts = []
+            # Remove any old footer texts
+            for txt in getattr(self, '_footer_texts', []):
+                txt.remove()
+            self._footer_texts = []
 
-        # Force draw to get accurate measurements
+            # force draw for accurate coords
+            self.fig.canvas.draw()
+            render = self.fig.canvas.get_renderer()
+
+            # locate the xlabel in figure coords
+            xlabel = self.ax.xaxis.label
+            xb = xlabel.get_window_extent(render)
+            xf = xb.transformed(self.fig.transFigure.inverted())
+
+            # wrap each dict entry on its own line
+            lines = [f"{k}: {v}" for k, v in info_dict.items()]
+            max_chars = max(10, int(wrap_width * self.ax.get_position().width))
+            text = "\n".join(textwrap.fill(l, max_chars) for l in lines)
+
+            # position just below the label
+            pad_fig = pad * xf.height
+            x_fig = 0.5 * (xf.x0 + xf.x1)
+            y_fig = xf.y0 - pad_fig
+
+            footer = self.fig.text(
+                x_fig, y_fig, text,
+                transform=self.fig.transFigure,
+                ha='center', va='top',
+                fontsize=fontsize, color=color,
+                family='monospace', linespacing=1.2,
+            )
+            footer.footer_tag = True
+            self._footer_texts.append(footer)
+
+            # Get footer dimensions
+            self.fig.canvas.draw()
+            fbbox = footer.get_window_extent(render)
+            fbbox_fig = fbbox.transformed(self.fig.transFigure.inverted())
+
+            # Calculate slider position
+            slider_height = 0.03
+            slider_padding = 0.01
+            min_bottom = 0.01
+
+            # If footer extends below minimum height, adjust layout
+            if fbbox_fig.y0 < min_bottom:
+                old_bottom = plt.rcParams['figure.subplot.bottom']
+                required_space = min_bottom - fbbox_fig.y0
+                new_bottom = old_bottom + required_space
+
+                # Store original positions
+                orig_positions = {name: info['ax'].get_position().bounds for name, info in self.Axis.items()}
+                main_pos = self.ax.get_position()
+
+                # Update main axis position
+                scale_factor = (1.0 - new_bottom) / (1.0 - old_bottom)
+                new_height = main_pos.height * scale_factor
+                self.ax.set_position([main_pos.x0, new_bottom, main_pos.width, new_height])
+
+                # Update all sub-axes proportionally
+                for name, (x0, y0, width, height) in orig_positions.items():
+                    rel_y = (y0 - main_pos.y0) / main_pos.height  # Relative position
+                    rel_height = height / main_pos.height  # Relative height
+
+                    new_y = new_bottom + (rel_y * new_height)
+                    new_height_sub = rel_height * new_height
+
+                    self.Axis[name]['ax'].set_position([x0, new_y, width, new_height_sub])
+
+                # Redraw and reposition footer with new coordinates
+                self.fig.canvas.draw()
+                lbl_box = xlabel.get_window_extent(render)
+                lbl_box_fig = lbl_box.transformed(self.fig.transFigure.inverted())
+                y_fig = lbl_box_fig.y0 - pad_fig
+                footer.set_position((x_fig, y_fig))
+                fbbox = footer.get_window_extent(render)
+                fbbox_fig = fbbox.transformed(self.fig.transFigure.inverted())
+
+            # Calculate slider position
+            slider_height = 0.03
+            slider_padding = 0.01
+            if self.slider:
+                slider_y = fbbox_fig.y0 - slider_height - slider_padding
+            else:
+                slider_y = fbbox_fig.y0 - slider_padding
+
+            # Position slider if present
+            if self.slider:
+                ext = self.ax.get_position()
+                self.slider_ax.set_position([ext.x0, slider_y, ext.width, slider_height])
+                self.fig.canvas.draw_idle()
+
+    def _on_resize(self, event):
+        """Handle resize events by properly positioning all elements with correct spacing"""
+        # Disable conflicting layout systems
+        self.fig.set_constrained_layout(False)
+        self.fig.set_tight_layout(False)
+
+        # Get figure dimensions
+        fig_width, fig_height = self.fig.get_size_inches() * self.fig.dpi
+
+        # Get minimum width needed for axis labels
+        min_left_margin = 0.05
+        min_right_margin = 0.05
+
+        # Calculate minimum required margins by measuring axis labels
         self.fig.canvas.draw()
         renderer = self.fig.canvas.get_renderer()
 
-        # Get x-axis label position
-        xlabel = self.ax.xaxis.label
-        lbl_box = xlabel.get_window_extent(renderer)
-        lbl_box_fig = lbl_box.transformed(self.fig.transFigure.inverted())
+        # Check if we have any axes to determine required margins
+        left_offset = 0
+        right_offset = 0
 
-        # Format and wrap metadata text
-        lines = [f"{k}: {v}" for k, v in info_dict.items()]
-        axis_w = self.ax.get_position().width
-        wrap_chars = max(10, int(wrap_width * axis_w))
-        wrapped = "\n".join(textwrap.fill(ln, wrap_chars) for ln in lines)
-
-        # Calculate vertical position with small padding
-        pad_fig = pad * lbl_box_fig.height
-        x_fig = 0.5 * (lbl_box_fig.x0 + lbl_box_fig.x1)
-        y_fig = lbl_box_fig.y0 - pad_fig
-
-        # Add footer text
-        footer = self.fig.text(
-            x_fig, y_fig, wrapped,
-            transform=self.fig.transFigure,
-            ha='center', va='top',
-            fontsize=fontsize,
-            color=color,
-            family='monospace',
-            linespacing=1.2
-        )
-        footer.footer_tag = True
-        self._footer_texts.append(footer)
-
-        # Get footer dimensions
-        self.fig.canvas.draw()
-        fbbox = footer.get_window_extent(renderer)
-        fbbox_fig = fbbox.transformed(self.fig.transFigure.inverted())
-
-        # Calculate slider position
-        slider_height = 0.03
-        slider_padding = 0.01
-        min_bottom = 0.01
-
-        # Calculate total required space
-        if self.slider:
-            min_required_y = min_bottom + slider_height + slider_padding
-        else:
-            min_required_y = min_bottom
-
-        # If footer extends below minimum height, adjust layout
-        if fbbox_fig.y0 < min_required_y:
-            # Calculate needed adjustment
-            needed = min_required_y - fbbox_fig.y0
-
-            # Store original positions
-            orig_positions = {}
-            for name, axis_info in self.Axis.items():
-                orig_positions[name] = axis_info['ax'].get_position().bounds
-            main_pos = self.ax.get_position().bounds
-
-            # Adjust figure's bottom margin
-            old_bottom = self.fig.subplotpars.bottom
-            new_bottom = old_bottom + needed
-            plt.subplots_adjust(bottom=new_bottom)
-
-            # Update main axis position
-            scale_factor = (1.0 - new_bottom) / (1.0 - old_bottom)
-            new_height = main_pos[3] * scale_factor
-            self.ax.set_position([main_pos[0], new_bottom, main_pos[2], new_height])
-
-            # Update all sub-axes proportionally
-            for name, (x0, y0, width, height) in orig_positions.items():
-                rel_y = (y0 - main_pos[1]) / main_pos[3]  # Relative position
-                rel_height = height / main_pos[3]  # Relative height
-
-                new_y = new_bottom + (rel_y * new_height)
-                new_height_sub = rel_height * new_height
-
-                self.Axis[name]['ax'].set_position([x0, new_y, width, new_height_sub])
-
-            # Redraw and reposition footer with new coordinates
-            self.fig.canvas.draw()
-            lbl_box = xlabel.get_window_extent(renderer)
-            lbl_box_fig = lbl_box.transformed(self.fig.transFigure.inverted())
-            y_fig = lbl_box_fig.y0 - pad_fig
-            footer.set_position((x_fig, y_fig))
-
-        # Position slider if present
-        if self.slider:
-            # Position slider just below footer
-            fbbox = footer.get_window_extent(renderer)
-            fbbox_fig = fbbox.transformed(self.fig.transFigure.inverted())
-
-            slider_y = fbbox_fig.y0 - slider_padding - slider_height
-            slider_y = max(min_bottom, slider_y)  # Ensure minimum bottom margin
-
-            ext = self.ax.get_position()
-            self.slider_ax.set_position([ext.x0, slider_y, ext.width, slider_height])
-
-        self.fig.canvas.draw_idle()
-
-    def _on_resize(self, event):
-        """Handle resize events by updating all axes and footer"""
-        # Store current size
-        old_width = getattr(self, '_last_width', event.width)
-        old_height = getattr(self, '_last_height', event.height)
-
-        # Force initial draw to get accurate measurements
-        self.fig.canvas.draw()
-
-        # First, update all axis positions
         for name, info in self.Axis.items():
-            self._resize_axis(name)
+            ax2 = info['ax']
+            position = info['Position'].lower()
+            offset = info.get('offset', 0.02)
 
-        # Re-autoscale axes that need it
+            # Get label width to ensure it's visible
+            if position == 'left':
+                if ax2.yaxis.label.get_text():
+                    bbox = ax2.yaxis.label.get_window_extent(renderer)
+                    bbox_fig = bbox.transformed(self.fig.transFigure.inverted())
+                    left_offset = max(left_offset, bbox_fig.width * (1 + offset))
+            else:  # right position
+                if ax2.yaxis.label.get_text():
+                    bbox = ax2.yaxis.label.get_window_extent(renderer)
+                    bbox_fig = bbox.transformed(self.fig.transFigure.inverted())
+                    right_offset = max(right_offset, bbox_fig.width * (1 + offset))
+
+        # Add minimum padding for left/right margins based on actual axis labels
+        min_left_margin = max(min_left_margin, left_offset + 0.05)
+        min_right_margin = max(min_right_margin, right_offset + 0.05)
+
+        # Dynamic margins - adjust margins based on window size but ensure axis labels are visible
+        # For larger windows, use smaller relative margins to maximize plot area
+        # For smaller windows, ensure all axis labels remain visible
+        h_scale_factor = min(1.0, max(0.5, fig_width / 1000))  # Scale based on width
+        v_scale_factor = min(1.0, max(0.5, fig_height / 800))  # Scale based on height
+
+        # Calculate horizontal margins - ensure they're large enough for axis labels
+        left_margin = max(min_left_margin, 0.12 * h_scale_factor)
+        right_margin = min(1.0 - min_left_margin, 1.0 - (0.12 * h_scale_factor))
+
+        # Calculate vertical margins
+        top_margin = min(0.98, 0.95 + (0.03 * (1 - v_scale_factor)))
+        bottom_margin = max(0.05, 0.15 * v_scale_factor)
+
+        # First apply dynamic margins
+        plt.subplots_adjust(left=left_margin, right=right_margin,
+                            bottom=bottom_margin, top=top_margin)
+
+        # Force draw to get accurate positions
+        self.fig.canvas.draw()
+        main = self.ax.get_position()
+
+        # 1. Position all sub-axes based on main axis
+        for name, info in self.Axis.items():
+            ax2 = info['ax']
+            cell_h = main.height / self.Ngridy
+            center = main.y0 + (info['GridPos'] + 0.5) * cell_h
+            height = info['GridHeight'] * cell_h
+            bottom = center - height/2
+            ax2.set_position([main.x0, bottom, main.width, height])
+            position = info['Position'].lower()
+            offset = info.get('offset', 0.02)  # Get stored offset
+            if position == 'left':
+                ax2.spines['right'].set_visible(False)
+                ax2.spines['left'].set_position(('axes', -offset))
+            else:
+                ax2.yaxis.tick_right()
+                ax2.yaxis.set_label_position('right')
+                ax2.spines['left'].set_visible(False)
+                ax2.spines['right'].set_position(('axes', 1 + offset))
+            ax2.set_xlim(self.ax.get_xlim())
+
+        # 2. Apply autoscaling to axes
         for info in self.Axis.values():
             if info.get('AutoScale', False):
                 ax2 = info['ax']
-                all_y = np.hstack([ln.get_ydata() for ln in ax2.get_lines()])
-                if len(all_y) > 0:  # Only adjust if there's data
-                    lo, hi = np.floor(all_y.min()), np.ceil(all_y.max())
-                    ax2.set_ylim(lo, hi)
-                    ax2.set_yticks([lo, 0.5 * (lo + hi), hi])
+                lines = ax2.get_lines()
+                if lines:
+                    ys = np.hstack([ln.get_ydata() for ln in lines])
+                    if ys.size:
+                        lo, hi = np.floor(ys.min()), np.ceil(ys.max())
+                        ax2.set_ylim(lo, hi)
+                        ax2.set_yticks([lo, 0.5*(lo+hi), hi])
 
-        # Reset margins when window size changes significantly
-        size_changed = (abs(event.width - old_width) > 10 or
-                       abs(event.height - old_height) > 10)
-
-        if size_changed:
-            # Reset to default margins
-            plt.subplots_adjust(bottom=0.1, top=0.9)
-
-        # Store current size for next comparison
-        self._last_width = event.width
-        self._last_height = event.height
-
-        # Restore title if it exists
+        # 3. Calculate space needed for all elements
+        # Get space for title if present
+        title_height = 0
         if hasattr(self, '_title_metadata'):
-            title, fontsize, pad, kwargs = self._title_metadata
-            self.ax.set_title(title, fontsize=fontsize, pad=pad, **kwargs)
+            renderer = self.fig.canvas.get_renderer()
+            if self.ax.title and self.ax.title.get_text():
+                title_box = self.ax.title.get_window_extent(renderer)
+                title_box_fig = title_box.transformed(self.fig.transFigure.inverted())
+                title_height = title_box_fig.height + 0.02  # Add padding
 
-            # Force draw to get accurate measurements
+        # Calculate space needed for slider
+        slider_height = 0
+        slider_padding = 0
+        if self.slider:
+            slider_height = 0.03  # Fixed height for slider
+            slider_padding = 0.08  # Increased padding above slider for footer
+
+        # 4. Calculate space needed for footer
+        footer_height = 0
+        if hasattr(self, '_footer_metadata'):
+            # Clear old footer
+            for txt in getattr(self, '_footer_texts', []):
+                txt.remove()
+            self._footer_texts = []
+
+            # Temporarily position footer to measure it
+            info_dict, fontsize, color, pad, wrap_width = self._footer_metadata
+            lines = [f"{k}: {v}" for k, v in info_dict.items()]
+            max_chars = max(10, int(wrap_width * main.width))
+            text = "\n".join(textwrap.fill(l, max_chars) for l in lines)
+
+            # Create temp footer for measurement
+            temp_footer = self.fig.text(
+                0.5, 0.1, text,  # Temporary position
+                transform=self.fig.transFigure,
+                ha='center', va='top',
+                fontsize=fontsize, color=color,
+                family='monospace', linespacing=1.2,
+            )
+
+            # Measure footer height
+            self.fig.canvas.draw()
+            renderer = self.fig.canvas.get_renderer()
+            fb = temp_footer.get_window_extent(renderer)
+            ff = fb.transformed(self.fig.transFigure.inverted())
+            footer_height = ff.height + 0.03  # Add padding
+            temp_footer.remove()
+
+        # 5. Adjust figure layout to accommodate all elements
+        # Calculate minimum required bottom margin
+        required_bottom = 0.02  # Minimum padding at bottom
+
+        # Calculate exact space needed for slider if present
+        if self.slider:
+            required_bottom += slider_height  # Slider height
+
+        # Calculate exact space needed for footer if present
+        if footer_height > 0:
+            # If slider is present, place footer right above it
+            if self.slider:
+                # We need to ensure the bottom margin includes BOTH the slider and footer heights
+                required_bottom = max(required_bottom, 0.02 + slider_height + footer_height + 0.01)
+            else:
+                # Just space for footer
+                required_bottom = max(required_bottom, 0.02 + footer_height)
+
+        # Calculate required top margin with minimal padding
+        required_top = 1.0 - title_height - 0.01  # Minimal padding at top
+
+        # Ensure our margins don't go below the minimum required
+        bottom_margin = max(bottom_margin, required_bottom)
+        top_margin = min(top_margin, required_top)
+
+        # Apply final margins to maximize plot space while keeping all elements visible
+        plt.subplots_adjust(bottom=bottom_margin, top=top_margin)
+
+        # Redraw to update positions
+        self.fig.canvas.draw()
+        main = self.ax.get_position()
+
+        # 6. Position the footer if it exists
+        if hasattr(self, '_footer_metadata'):
             self.fig.canvas.draw()
             renderer = self.fig.canvas.get_renderer()
 
-            # Get title dimensions and adjust top margin
-            bbox = self.ax.title.get_window_extent(renderer)
-            bbox_fig = bbox.transformed(self.fig.transFigure.inverted())
+            # Get the position of the x-axis label
+            xlabel = self.ax.xaxis.label
+            xb = xlabel.get_window_extent(renderer)
+            xf = xb.transformed(self.fig.transFigure.inverted())
 
-            # Add extra padding to ensure title is visible
-            extra_padding = 0.03
-            required_top = 1.0 - bbox_fig.height - extra_padding
+            info_dict, fontsize, color, pad, wrap_width = self._footer_metadata
+            lines = [f"{k}: {v}" for k, v in info_dict.items()]
+            max_chars = max(10, int(wrap_width * main.width))
+            text = "\n".join(textwrap.fill(l, max_chars) for l in lines)
 
-            # Always adjust top margin for title
-            plt.subplots_adjust(top=required_top)
+            # Position footer directly below the x-axis label with proper spacing
+            x_fig = 0.5 * (xf.x0 + xf.x1)  # Center horizontally based on label
 
-        # Force draw before recalculating footer position
-        self.fig.canvas.draw()
+            # Calculate y position based on the bottom of the xlabel with padding
+            pad_fig = pad * xf.height  # Scale padding based on label height
+            y_fig = xf.y0 - pad_fig  # Position just below the label
 
-        # Update the footer with proper layout (do this last)
-        if hasattr(self, '_footer_metadata'):
-            self.AddFooter(*self._footer_metadata)
+            # Add footer with top alignment to grow downward from this position
+            footer = self.fig.text(
+                x_fig, y_fig, text,
+                transform=self.fig.transFigure,
+                ha='center', va='top',  # Top alignment so text grows downward
+                fontsize=fontsize, color=color,
+                family='monospace', linespacing=1.2,
+            )
+            self._footer_texts.append(footer)
 
+            # Get footer dimensions to position slider if needed
+            self.fig.canvas.draw()
+            fbbox = footer.get_window_extent(renderer)
+            fbbox_fig = fbbox.transformed(self.fig.transFigure.inverted())
+
+            # Ensure footer is within window bounds
+            # If it would go out of bounds, adjust the plot accordingly
+            if fbbox_fig.y0 < 0.02 + (slider_height if self.slider else 0):
+                # Calculate how much the plot needs to shrink
+                adjustment = 0.02 + (slider_height if self.slider else 0) - fbbox_fig.y0
+
+                # Adjust main plot position to make room
+                current_pos = self.ax.get_position()
+                new_bottom = current_pos.y0 + adjustment
+                new_height = current_pos.height - adjustment
+
+                # Apply the adjustment
+                self.ax.set_position([current_pos.x0, new_bottom, current_pos.width, new_height])
+
+                # Redraw and reposition the x-axis label and footer
+                self.fig.canvas.draw()
+                xb = xlabel.get_window_extent(renderer)
+                xf = xb.transformed(self.fig.transFigure.inverted())
+
+                # Recalculate footer position
+                y_fig = xf.y0 - pad_fig
+                footer.set_position((x_fig, y_fig))
+
+                # Update footer dimensions
+                self.fig.canvas.draw()
+                fb = footer.get_window_extent(renderer)
+
+            # Reposition all sub-axes after main axis adjustment
+            self._update_subaxes_positions()
+
+        # 7. Position slider at the bottom with minimal space
+        if self.slider:
+            slider_y = 0.02  # Fixed position at bottom with minimal padding
+            self.slider_ax.set_position([main.x0, slider_y, main.width, slider_height])
+
+        # 8. Update vertical lines and intersections
+        for name, data in self.Curve.items():
+            if data.get('IsVerticalLine', False):
+                xpos = data.get('XPosition')
+                line = data['Curve']
+                line.set_xdata([xpos, xpos])
+
+        # Final redraw
+        self.fig.canvas.draw_idle()
 
     def AddTitle(self, title, fontsize=12, pad=10, **kwargs):
         """
@@ -513,7 +795,7 @@ class FTPlot:
         required_top = 1.0 - bbox_fig.height - extra_padding
 
         # Ensure top margin is sufficient
-        plt.subplots_adjust(top=required_top)
+        # plt.subplots_adjust(top=required_top)
 
         # Store title for resize events
         self._title_metadata = (title, fontsize, pad, kwargs)
@@ -521,9 +803,36 @@ class FTPlot:
         # Redraw the figure
         self.fig.canvas.draw_idle()
 
+    def _update_subaxes_positions(self):
+        """Update the positions of all sub-axes based on the main axis position"""
+        main = self.ax.get_position()
+
+        for name, info in self.Axis.items():
+            ax2 = info['ax']
+            cell_h = main.height / self.Ngridy
+            center = main.y0 + (info['GridPos'] + 0.5) * cell_h
+            height = info['GridHeight'] * cell_h
+            bottom = center - height/2
+            ax2.set_position([main.x0, bottom, main.width, height])
+
+            # Get the position and offset from axis configuration
+            position = info['Position'].lower()
+            offset = info.get('offset', 0.02)  # Default to 0.02 if not stored
+
+            # Apply the correct spine position with stored offset
+            if position == 'left':
+                ax2.spines['right'].set_visible(False)
+                ax2.spines['left'].set_position(('axes', -offset))
+            else:
+                ax2.yaxis.tick_right()
+                ax2.yaxis.set_label_position('right')
+                ax2.spines['left'].set_visible(False)
+                ax2.spines['right'].set_position(('axes', 1 + offset))
+
+            ax2.set_xlim(self.ax.get_xlim())
+
 
 if __name__ == "__main__":
-
     # matplotlib.use('Qt5Agg')
     plt.ion()
     plt.close('all')
@@ -546,7 +855,7 @@ if __name__ == "__main__":
     Fdr.AddCurve('C1', 'Axis 1', Xdata, Ydata)
     Fdr.AddAxis(Name='Axis 2',GridPos=3,Unit='m/s',Position='Right')
     Fdr.AddCurve('C2', 'Axis 2', Xdata, Ydata, color='r')
-    Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=.1)
+    Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=0.1)
     Fdr.AddCurve('C3', 'Axis 3', Xdata, Ydata, color='m')
 
     Fdr.RemoveCurve('C1')
@@ -557,4 +866,3 @@ if __name__ == "__main__":
     Fdr.AddVerticalLine(Name='0.7', Xpos=0.7, linestyle=':', color='green')
     Fdr.AddVerticalLine(Name='0.3', Xpos=0.3, linestyle='-.', marker='s', color='blue')
     Fdr.SetLabelPosition('C2', 0.5, 0.8)
-
