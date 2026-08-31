@@ -90,15 +90,13 @@ class FTPlot:
 
             if x_value > self.ax.get_xlim()[0] and x_value < self.ax.get_xlim()[1]:
 
-                self.Curve[curve]["ValueBox"].set_text("{:.3f}".format(y_value))
+                self.Curve[curve]["ValueBox"].set_text("{:.1f}".format(y_value))
 
             else:
 
                 self.Curve[curve]["ValueBox"].set_text("")
 
     def update(self, val):
-        
-        print('!'*20,val)
         
         self.vline.set_xdata(np.array([val]))  # Update x-position of the vertical line
         self.updateDataBoxes(val)
@@ -208,7 +206,7 @@ class FTPlot:
                 ha="center",
                 va="center",
                 color=C.get_color(),
-                bbox=dict(facecolor="w", edgecolor="w", boxstyle="round,pad=0.1", alpha=1.0),
+                bbox=dict(facecolor="w", edgecolor="w", boxstyle="round,pad=0.1", alpha=.5),
             )
 
             self.Curve[Name] = {"Curve": C, "Axis": Axis, "Label": Label, "ValueBox": ValueBox}

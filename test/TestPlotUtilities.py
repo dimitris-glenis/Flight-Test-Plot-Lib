@@ -8,9 +8,12 @@ Created on Tue Jun 10 15:12:06 2025
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from src.ftplotlib import FTPlotlib as FTP
+#from src.ftplotlib import FTPlotlib as FTP
+from ftplotlib import FTPlotlib as FTP
 
-df = pd.read_csv('test/data/FlightData.csv',sep=';')
+plt.close('all')
+
+df = pd.read_csv('data/FlightData.csv',sep=';')
 
 fig,ax = plt.subplots()
     
@@ -43,7 +46,7 @@ for axis in AxisCurves.keys():
     for Name in AxisCurves[axis]:
         
         Color = np.random.uniform(0,.8,size=3)
-        Fdr.AddCurve(Name, axis, Ts, df[Name], color = Color)
+        Fdr.AddCurve(Name, axis, Ts, df[Name], color = Color,Label=Name)
 
 
 plt.show()
