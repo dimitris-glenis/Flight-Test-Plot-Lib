@@ -90,15 +90,15 @@ class FTPlot:
 
             if x_value > self.ax.get_xlim()[0] and x_value < self.ax.get_xlim()[1]:
 
-                self.Curve[curve]["ValueBox"].set_text("{:.3f}".format(y_value))
+                self.Curve[curve]["ValueBox"].set_text("{:.1f}".format(y_value))
 
             else:
 
                 self.Curve[curve]["ValueBox"].set_text("")
 
     def update(self, val):
-
-        self.vline.set_xdata(val)  # Update x-position of the vertical line
+        
+        self.vline.set_xdata(np.array([val]))  # Update x-position of the vertical line
         self.updateDataBoxes(val)
         self.fig.canvas.draw_idle()  # Redraw the plot
 
@@ -176,7 +176,7 @@ class FTPlot:
 
                 self.Axis[Name]["ax"].spines["right"].set_position(("axes", 1 + offset))
 
-    def AddCurve(self, Name, Axis, Xdata, Ydata, **kwargs):
+    def AddCurve(self, Name, Axis, Xdata, Ydata, Label=None, **kwargs):
 
         if Name in self.Curve.keys():
 
@@ -186,17 +186,18 @@ class FTPlot:
 
             (C,) = self.Axis[Axis]["ax"].plot(Xdata, Ydata, **kwargs)
 
-            idx = np.random.randint(len(Xdata) // 4, int(len(Xdata) * 0.75))
-
-            Label = self.Axis[Axis]["ax"].text(
-                Xdata[idx],
-                Ydata[idx],
-                Name,
-                ha="center",
-                va="center",
-                color=C.get_color(),
-                bbox=dict(facecolor="w", edgecolor="w", boxstyle="round,pad=0.1"),
-            )
+            if not (Label is None):
+                idx = np.random.randint(len(Xdata) // 4, int(len(Xdata) * 0.75))
+    
+                Label = self.Axis[Axis]["ax"].text(
+                    Xdata[idx],
+                    Ydata[idx],
+                    Name,
+                    ha="center",
+                    va="center",
+                    color=C.get_color(),
+                    bbox=dict(facecolor="w", edgecolor="w", boxstyle="round,pad=0.1"),
+                )
 
             ValueBox = self.Axis[Axis]["ax"].text(
                 Xdata[0],
@@ -205,7 +206,7 @@ class FTPlot:
                 ha="center",
                 va="center",
                 color=C.get_color(),
-                bbox=dict(facecolor="w", edgecolor="w", boxstyle="round,pad=0.1", alpha=1.0),
+                bbox=dict(facecolor="w", edgecolor="w", boxstyle="round,pad=0.1", alpha=.5),
             )
 
             self.Curve[Name] = {"Curve": C, "Axis": Axis, "Label": Label, "ValueBox": ValueBox}
@@ -247,24 +248,26 @@ class FTPlot:
                 )
 
 
-"""
-plt.close('all')
 
+if __name__ == '__main__':
 
-fig,ax = plt.subplots()
-
-
-Fdr = FDRplot(ax,slider=True)
-
-Fdr.AddAxis(Name='Axis 1',GridHeight=6,GridPos=.5,Unit='m/s')
-Fdr.AddAxis(Name='Axis 2',GridPos=3,Unit='m/s',Position='Right')
-
-Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=.1)
-
-Xdata = np.linspace(0,1)
-Ydata = 3.7 * np.cos(13 * Xdata)
-
-Fdr.AddCurve('C1','Axis 1',Xdata,Ydata)
-Fdr.AddCurve('C2','Axis 2',Xdata,Ydata,color='r')
-Fdr.AddCurve('C3','Axis 3',Xdata,Ydata,color='m')
-"""
+    plt.close('all')
+    
+    
+    fig,ax = plt.subplots()
+    
+    
+    Fdr = FTPlot(fig,ax,slider=True)
+    
+    Fdr.AddAxis(Name='Axis 1',GridHeight=6,GridPos=.5,Unit='m/s')
+    Fdr.AddAxis(Name='Axis 2',GridPos=3,Unit='m/s',Position='Right')
+    
+    Fdr.AddAxis(Name='Axis 3',GridPos=5,Unit='deg',offset=.1)
+    
+    Xdata = np.linspace(0,1)
+    Ydata = 3.7 * np.cos(13 * Xdata)
+    
+    Fdr.AddCurve('C1','Axis 1',Xdata,Ydata,Label='$C_1$')
+    Fdr.AddCurve('C2','Axis 2',Xdata,Ydata,color='r')
+    Fdr.AddCurve('C3','Axis 3',Xdata,Ydata,color='m')
+    
