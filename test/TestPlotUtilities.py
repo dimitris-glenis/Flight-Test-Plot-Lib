@@ -8,14 +8,13 @@ Created on Tue Jun 10 15:12:06 2025
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-#from src.ftplotlib import FTPlotlib as FTP
 from ftplotlib import FTPlotlib as FTP
 
 plt.close('all')
 
 df = pd.read_csv('data/FlightData.csv',sep=';')
 
-fig,ax = plt.subplots()
+fig,ax = plt.subplots(figsize=(10,9))
     
 
 Ts = df['time (s)']
